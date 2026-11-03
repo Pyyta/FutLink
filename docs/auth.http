@@ -1,0 +1,163 @@
+# FutLink · Fase 3 · Autenticación, perfil y recuperación
+# Requiere la extensión "REST Client" de VS Code.
+# Levanta el backend con: npm run dev   (desde la raíz del repo)
+#
+# Los correos de desarrollo NO se imprimen en consola: se guardan en
+# backend/.mail-outbox/*.txt. Abre el archivo más reciente para copiar el
+# código de 6 dígitos en @resetCode antes de ejecutar la petición de reset.
+# Esto evita registrar códigos en los logs.
+
+@baseUrl = http://localhost:3000
+@email = jugador.fase3@example.com
+@password = Futbol1234
+@newPassword = NuevaClave456
+@resetCode = 123456
+
+### 0. Catálogo público (posiciones y localidades)
+GET {{baseUrl}}/api/catalog
+
+### 1. Registro inicial (RF-01 paso 5)
+# @name register
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+### Variables de la sesión recién creada
+@accessToken = {{register.response.body.accessToken}}
+@refreshToken = {{register.response.body.refreshToken}}
+
+### 2. Perfil propio: debe salir profileCompleted = false
+GET {{baseUrl}}/api/me
+Authorization: Bearer {{accessToken}}
+
+### 3. Completar perfil obligatorio (RF-02)
+# positionIds: 1=portero, 2=defensa, 3=mediocampista, 4=delantero
+PUT {{baseUrl}}/api/me/profile
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Ana Pérez",
+  "phone": "300 123 4567",
+  "locality": "Suba",
+  "positionIds": [1, 3]
+}
+
+### 4. Perfil completo: profileCompleted = true
+GET {{baseUrl}}/api/me
+Authorization: Bearer {{accessToken}}
+
+### 5. Iniciar sesión (RF-01 paso 4)
+# @name login
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+@loginAccessToken = {{login.response.body.accessToken}}
+@loginRefreshToken = {{login.response.body.refreshToken}}
+
+### 6. Recuperar contraseña (RF-01 paso 6)
+# Respuesta genérica exista o no el correo. El código queda en
+# backend/.mail-outbox; cópialo en @resetCode.
+POST {{baseUrl}}/api/auth/forgot-password
+Content-Type: application/json
+
+{
+  "email": "{{email}}"
+}
+
+### 7. Restablecer contraseña con el código temporal (RNF-05)
+POST {{baseUrl}}/api/auth/reset-password
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "code": "{{resetCode}}",
+  "newPassword": "{{newPassword}}"
+}
+
+### 8. Login con la contraseña nueva
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{newPassword}}"
+}
+
+### 9. Rotar el refresh token
+POST {{baseUrl}}/api/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{loginRefreshToken}}"
+}
+
+### 10. Cerrar sesión (revoca el refresh token)
+POST {{baseUrl}}/api/auth/logout
+Content-Type: application/json
+
+{
+  "refreshToken": "{{loginRefreshToken}}"
+}
+
+### 11. EXCEPCIÓN: registro duplicado (409 EMAIL_IN_USE)
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+### 12. EXCEPCIÓN: contraseña corta (400 VALIDATION_ERROR)
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "otro.correo@example.com",
+  "password": "corta"
+}
+
+### 13. EXCEPCIÓN: credenciales incorrectas (401 INVALID_CREDENTIALS)
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "ClaveEquivocada1"
+}
+
+### 14. EXCEPCIÓN: correo no registrado en recuperación (misma respuesta genérica)
+POST {{baseUrl}}/api/auth/forgot-password
+Content-Type: application/json
+
+{
+  "email": "no.existe@example.com"
+}
+
+### 15. EXCEPCIÓN: código de recuperación inválido (400 INVALID_RESET_CODE)
+POST {{baseUrl}}/api/auth/reset-password
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "code": "000000",
+  "newPassword": "OtraClave789"
+}
+
+### 16. EXCEPCIÓN: sin token (401 AUTH_REQUIRED)
+GET {{baseUrl}}/api/me
+
+### 17. EXCEPCIÓN: perfil incompleto en funcionalidad protegida (RF-02)
+# Desde la Fase 4, GET /api/users/:id monta el gate PROFILE_INCOMPLETE.
+# Usa un token de una cuenta sin perfil completo; la respuesta es 403.
+# GET /api/me sigue permitido para poder completar el perfil.

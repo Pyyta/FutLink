@@ -1,0 +1,185 @@
+# FutLink · Fase 6 · Búsqueda de jugadores (RF-05)
+# Requiere la extensión "REST Client" de VS Code.
+# Levanta el backend con: npm run dev   (desde la raíz del repo)
+#
+# Recorre: catálogo → registro de un visitante y tres jugadores → perfiles
+# completos → búsqueda por nombre, zona, posición y combinaciones → paginación
+# → perfil público del jugador elegido → lista vacía → errores de validación
+# → visitante sin perfil completo.
+#
+# Los resultados NO incluyen teléfono ni correo (RF-05). El detalle del perfil
+# (GET /api/users/:id) sigue la regla de visibilidad de la Fase 4.
+#
+# Los jugadores suspendidos y las cuentas con perfil incompleto se excluyen de
+# la búsqueda; eso se verifica en tests/users.search.test.ts porque suspender
+# una cuenta es una función del administrador (Fase 10).
+
+@baseUrl = http://localhost:3000
+@password = Futbol1234
+@emailViewer = visitante.fase6@example.com
+@emailAna = ana.fase6@example.com
+@emailBruno = bruno.fase6@example.com
+@emailCarla = carla.fase6@example.com
+
+### 0. Catálogo público (posiciones y localidades)
+GET {{baseUrl}}/api/catalog
+
+### 1. Registro del visitante (RF-01)
+# @name registerViewer
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{emailViewer}}",
+  "password": "{{password}}"
+}
+
+@tokenViewer = {{registerViewer.response.body.accessToken}}
+
+### 2. Perfil del visitante (RF-02)
+PUT {{baseUrl}}/api/me/profile
+Authorization: Bearer {{tokenViewer}}
+Content-Type: application/json
+
+{
+  "name": "Violeta Visitante",
+  "phone": "301 000 0001",
+  "locality": "Chapinero",
+  "positionIds": [4]
+}
+
+### 3. Registro y perfil de Ana (Suba, portera/defensa)
+# @name registerAna
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{emailAna}}",
+  "password": "{{password}}"
+}
+
+###
+PUT {{baseUrl}}/api/me/profile
+Authorization: Bearer {{registerAna.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Ana Búsqueda",
+  "phone": "301 000 0002",
+  "locality": "Suba",
+  "positionIds": [1, 2]
+}
+
+### 4. Registro y perfil de Bruno (Kennedy, mediocampista)
+# @name registerBruno
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{emailBruno}}",
+  "password": "{{password}}"
+}
+
+###
+PUT {{baseUrl}}/api/me/profile
+Authorization: Bearer {{registerBruno.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Bruno Búsqueda",
+  "phone": "301 000 0003",
+  "locality": "Kennedy",
+  "positionIds": [3]
+}
+
+### 5. Registro y perfil de Carla (Suba, portera)
+# @name registerCarla
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{emailCarla}}",
+  "password": "{{password}}"
+}
+
+###
+PUT {{baseUrl}}/api/me/profile
+Authorization: Bearer {{registerCarla.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Carla Búsqueda",
+  "phone": "301 000 0004",
+  "locality": "Suba",
+  "positionIds": [1]
+}
+
+### 6. Buscar todos los jugadores (paginado)
+# Respuesta: { players, page, pageSize, total, totalPages }
+# Cada jugador: id, name, locality, profilePic, positions[{id,title}],
+# rating { average, count }. Sin phone ni email.
+GET {{baseUrl}}/api/users?page=1&pageSize=10
+Authorization: Bearer {{tokenViewer}}
+
+### 7. Filtrar por nombre (coincidencia parcial, sin distinguir mayúsculas)
+GET {{baseUrl}}/api/users?name=busqueda
+Authorization: Bearer {{tokenViewer}}
+
+### 8. Filtrar por zona (sin distinguir mayúsculas)
+GET {{baseUrl}}/api/users?locality=suba
+Authorization: Bearer {{tokenViewer}}
+
+### 9. Filtrar por posición (1=portero, 2=defensa, 3=mediocampista, 4=delantero)
+GET {{baseUrl}}/api/users?positionId=1
+Authorization: Bearer {{tokenViewer}}
+
+### 10. Combinar filtros y paginar
+GET {{baseUrl}}/api/users?name=busqueda&locality=Suba&positionId=1&page=1&pageSize=1
+Authorization: Bearer {{tokenViewer}}
+
+### 11. Abrir el perfil público del jugador elegido (RF-09)
+# Usa el id de Ana devuelto por el registro. El teléfono solo aparece si existe
+# una solicitud aceptada (hasta la Fase 7 se prueba con datos sembrados).
+GET {{baseUrl}}/api/users/{{registerAna.response.body.user.id}}
+Authorization: Bearer {{tokenViewer}}
+
+### 12. Sin coincidencias: lista vacía, total 0, totalPages 0
+GET {{baseUrl}}/api/users?name=NoExisteF6
+Authorization: Bearer {{tokenViewer}}
+
+### 13. Sin autenticación (401 AUTH_REQUIRED)
+GET {{baseUrl}}/api/users
+
+### 14. Autenticado pero sin perfil completo (403 PROFILE_INCOMPLETE)
+# @name registerIncomplete
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "incompleto.fase6@example.com",
+  "password": "{{password}}"
+}
+
+###
+GET {{baseUrl}}/api/users
+Authorization: Bearer {{registerIncomplete.response.body.accessToken}}
+
+### 15. Localidad inexistente (400 VALIDATION_ERROR)
+GET {{baseUrl}}/api/users?locality=Ciudad%20Inventada
+Authorization: Bearer {{tokenViewer}}
+
+### 16. Posición inexistente (400)
+GET {{baseUrl}}/api/users?positionId=999999
+Authorization: Bearer {{tokenViewer}}
+
+### 17. Paginación inválida (400)
+GET {{baseUrl}}/api/users?page=0
+Authorization: Bearer {{tokenViewer}}
+
+### 18. Tamaño de página fuera de rango (400)
+GET {{baseUrl}}/api/users?pageSize=51
+Authorization: Bearer {{tokenViewer}}
+
+### 19. Nombre vacío (400)
+GET {{baseUrl}}/api/users?name=
+Authorization: Bearer {{tokenViewer}}

@@ -1,0 +1,13 @@
+@baseUrl = http://localhost:3000
+
+### Health: estado del servidor, la BD y PostGIS
+GET {{baseUrl}}/api/health
+
+### Ruta inexistente: formato de error uniforme
+GET {{baseUrl}}/api/no-existe
+
+### JSON inválido: error 400 uniforme
+POST {{baseUrl}}/api/health
+Content-Type: application/json
+
+{"roto":

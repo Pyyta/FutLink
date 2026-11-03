@@ -1,0 +1,463 @@
+# FutLink · Fase 10 · Administración (RF-11 a RF-14)
+# Requiere la extensión "REST Client" de VS Code.
+# Levanta el backend con: npm run dev   (desde la raíz del repo)
+#
+# Antes de empezar, provisiona el administrador:
+#   1. En backend/.env define ADMIN_EMAIL y ADMIN_PASSWORD.
+#   2. Ejecuta: npm run admin:create
+#   3. Ajusta @emailAdmin y @password abajo para que coincidan con ese .env.
+#   4. Inicia sesión con esas credenciales en el paso 0.
+#
+# Recorre:
+#   RF-11 usuarios: listar/buscar, crear, editar, suspender, reactivar y
+#        eliminar (borrado lógico con cancelación de partidos/solicitudes).
+#   RF-12 contenidos: listar, editar, ocultar/restaurar y eliminar partidos y
+#        comentarios, con notificación al autor y exclusión de lo oculto.
+#   RF-13 reportes: generar usuarios/partidos/solicitudes, histórico y
+#        exportación CSV.
+#   RF-14 configuración: escala de calificación, notificaciones, posiciones y
+#        localidades.
+#
+# Todas las rutas /api/admin exigen rol admin y responden Cache-Control:
+# no-store. El periodo de un reporte es [from, to) y no puede superar 366 días.
+
+@baseUrl = http://localhost:3000
+@password = Futbol1234
+@emailAdmin = admin@futlink.local
+@emailOrganizador = organizador.fase10@example.com
+@emailSolicitante = solicitante.fase10@example.com
+@emailGestionado = gestionado.fase10@example.com
+
+### 0. Inicio de sesión del administrador
+# @name loginAdmin
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{emailAdmin}}",
+  "password": "{{password}}"
+}
+
+@tokenAdmin = {{loginAdmin.response.body.accessToken}}
+
+### 0.1 Sin token (401 AUTH_REQUIRED)
+GET {{baseUrl}}/api/admin/users
+
+### 1. Configuración global vigente (RF-14)
+GET {{baseUrl}}/api/admin/config
+Authorization: Bearer {{tokenAdmin}}
+
+### 2. Crear, renombrar y eliminar una posición no utilizada
+# @name crearPosicion
+POST {{baseUrl}}/api/admin/config/positions
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{
+  "title": "  Ala Derecha  "
+}
+
+@positionId = {{crearPosicion.response.body.position.id}}
+
+###
+PATCH {{baseUrl}}/api/admin/config/positions/{{positionId}}
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{
+  "title": "ala derecha"
+}
+
+###
+DELETE {{baseUrl}}/api/admin/config/positions/{{positionId}}
+Authorization: Bearer {{tokenAdmin}}
+
+### 2.1 Posición en uso (409 POSITION_IN_USE)
+# La posición 1 corresponde a "portero" y la usan los perfiles de prueba.
+DELETE {{baseUrl}}/api/admin/config/positions/1
+Authorization: Bearer {{tokenAdmin}}
+
+### 3. Crear, renombrar y eliminar una localidad no utilizada
+# @name crearLocalidad
+POST {{baseUrl}}/api/admin/config/localities
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{
+  "name": "Localidad Fase 10"
+}
+
+@localityId = {{crearLocalidad.response.body.locality.id}}
+
+###
+PATCH {{baseUrl}}/api/admin/config/localities/{{localityId}}
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{
+  "name": "Localidad Fase 10 Bis"
+}
+
+###
+DELETE {{baseUrl}}/api/admin/config/localities/{{localityId}}
+Authorization: Bearer {{tokenAdmin}}
+
+### 4. Usuarios: listado y búsqueda (RF-11)
+GET {{baseUrl}}/api/admin/users?search=fase10&state=active&page=1&pageSize=20
+Authorization: Bearer {{tokenAdmin}}
+
+### 5. Crear una cuenta desde administración
+# El perfil queda completo de inmediato (nombre, teléfono, localidad y
+# posiciones son obligatorios).
+# @name crearUsuario
+POST {{baseUrl}}/api/admin/users
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{
+  "email": "{{emailGestionado}}",
+  "password": "{{password}}",
+  "name": "Jugador Gestionado",
+  "phone": "310 555 0101",
+  "locality": "Suba",
+  "positionIds": [1, 2],
+  "role": "user"
+}
+
+@userIdGestionado = {{crearUsuario.response.body.user.id}}
+
+### 5.1 Correo duplicado (409 EMAIL_IN_USE)
+POST {{baseUrl}}/api/admin/users
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{
+  "email": "{{emailGestionado}}",
+  "password": "{{password}}",
+  "name": "Duplicado",
+  "phone": "310 555 0199",
+  "locality": "Suba",
+  "positionIds": [1]
+}
+
+### 6. Editar nombre y suspender la cuenta
+# Suspender revoca las sesiones y bloquea el login con 403 ACCOUNT_SUSPENDED.
+PATCH {{baseUrl}}/api/admin/users/{{userIdGestionado}}
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{
+  "name": "Jugador Gestionado Editado",
+  "state": "suspended"
+}
+
+### 6.1 Login de una cuenta suspendida (403 ACCOUNT_SUSPENDED)
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{emailGestionado}}",
+  "password": "{{password}}"
+}
+
+### 6.2 Reactivar la cuenta
+PATCH {{baseUrl}}/api/admin/users/{{userIdGestionado}}
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{
+  "state": "active"
+}
+
+### 7. Preparar contenido: organizador y solicitante
+# @name registerOrganizador
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{emailOrganizador}}",
+  "password": "{{password}}"
+}
+
+@tokenOrganizador = {{registerOrganizador.response.body.accessToken}}
+
+###
+PUT {{baseUrl}}/api/me/profile
+Authorization: Bearer {{tokenOrganizador}}
+Content-Type: application/json
+
+{
+  "name": "Organizador Fase10",
+  "phone": "310 555 0201",
+  "locality": "Chapinero",
+  "positionIds": [1, 4]
+}
+
+# @name registerSolicitante
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{emailSolicitante}}",
+  "password": "{{password}}"
+}
+
+@tokenSolicitante = {{registerSolicitante.response.body.accessToken}}
+@userIdSolicitante = {{registerSolicitante.response.body.user.id}}
+
+###
+PUT {{baseUrl}}/api/me/profile
+Authorization: Bearer {{tokenSolicitante}}
+Content-Type: application/json
+
+{
+  "name": "Solicitante Fase10",
+  "phone": "310 555 0202",
+  "locality": "Suba",
+  "positionIds": [2, 3]
+}
+
+### 8. El organizador publica un partido
+# @name publicarPartido
+POST {{baseUrl}}/api/matches
+Authorization: Bearer {{tokenOrganizador}}
+Content-Type: application/json
+
+{
+  "matchDate": "2034-10-15T19:00:00-05:00",
+  "locality": "Chapinero",
+  "modality": "F7",
+  "description": "Partido para moderar en Fase 10",
+  "positions": [
+    { "positionId": 1, "slots": 1 }
+  ]
+}
+
+@matchId = {{publicarPartido.response.body.match.id}}
+@vacancyId = {{publicarPartido.response.body.match.vacancies[0].id}}
+
+### 9. El solicitante pide una plaza (queda pendiente)
+# @name enviarSolicitud
+POST {{baseUrl}}/api/requests
+Authorization: Bearer {{tokenSolicitante}}
+Content-Type: application/json
+
+{
+  "type": "match",
+  "vacancyId": {{vacancyId}}
+}
+
+@requestId = {{enviarSolicitud.response.body.request.id}}
+
+### 10. Listar contenidos y filtrar por texto (RF-12)
+GET {{baseUrl}}/api/admin/contents?type=match&search=moderar%20en%20Fase%2010
+Authorization: Bearer {{tokenAdmin}}
+
+### 11. Editar el partido desde administración
+PATCH {{baseUrl}}/api/admin/contents/matches/{{matchId}}
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{
+  "description": "Descripción corregida por administración"
+}
+
+### 12. Ocultar el partido
+# El detalle público responde 404 y la búsqueda lo excluye. El autor recibe
+# una notificación content_hidden.
+PATCH {{baseUrl}}/api/admin/contents/matches/{{matchId}}
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{
+  "moderationState": "hidden"
+}
+
+###
+GET {{baseUrl}}/api/matches/{{matchId}}
+Authorization: Bearer {{tokenSolicitante}}
+
+###
+GET {{baseUrl}}/api/notifications?status=all
+Authorization: Bearer {{tokenOrganizador}}
+
+### 13. Restaurar la visibilidad del partido
+PATCH {{baseUrl}}/api/admin/contents/matches/{{matchId}}
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{
+  "moderationState": "visible"
+}
+
+### 14. El organizador califica al solicitante (comentario moderable)
+# @name calificar
+PUT {{baseUrl}}/api/users/{{userIdSolicitante}}/rating
+Authorization: Bearer {{tokenOrganizador}}
+Content-Type: application/json
+
+{
+  "score": 5,
+  "comment": "Comentario que se revisará en administración"
+}
+
+@ratingId = {{calificar.response.body.rating.id}}
+
+### 15. Ocultar el comentario
+PATCH {{baseUrl}}/api/admin/contents/comments/{{ratingId}}
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{
+  "moderationState": "hidden"
+}
+
+### 15.1 El perfil ya no muestra el comentario ni lo promedia
+GET {{baseUrl}}/api/users/{{userIdSolicitante}}
+Authorization: Bearer {{tokenOrganizador}}
+
+### 16. Restaurar y editar el comentario
+PATCH {{baseUrl}}/api/admin/contents/comments/{{ratingId}}
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{
+  "moderationState": "visible",
+  "score": 4,
+  "comment": "Comentario editado por administración"
+}
+
+### 17. Eliminar el partido por moderación
+# Se cancela el partido, se liberan plazas y el solicitante recibe
+# match_cancelled. El autor recibe content_deleted.
+PATCH {{baseUrl}}/api/admin/contents/matches/{{matchId}}
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{
+  "moderationState": "deleted"
+}
+
+###
+GET {{baseUrl}}/api/requests?box=sent
+Authorization: Bearer {{tokenSolicitante}}
+
+### 18. Eliminar el comentario por moderación
+PATCH {{baseUrl}}/api/admin/contents/comments/{{ratingId}}
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{
+  "moderationState": "deleted"
+}
+
+### 19. Generar reportes (RF-13)
+# El periodo es [from, to) y no puede superar 366 días.
+# @name reporteUsuarios
+POST {{baseUrl}}/api/admin/reports
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{
+  "type": "users",
+  "from": "2026-01-01T00:00:00.000Z",
+  "to": "2026-12-31T00:00:00.000Z"
+}
+
+@reportId = {{reporteUsuarios.response.body.report.id}}
+
+### 19.1 Reporte de partidos
+POST {{baseUrl}}/api/admin/reports
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{
+  "type": "matches",
+  "from": "2026-01-01T00:00:00.000Z",
+  "to": "2026-12-31T00:00:00.000Z"
+}
+
+### 19.2 Reporte de solicitudes
+POST {{baseUrl}}/api/admin/reports
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{
+  "type": "requests",
+  "from": "2026-01-01T00:00:00.000Z",
+  "to": "2026-12-31T00:00:00.000Z"
+}
+
+### 19.3 Histórico
+GET {{baseUrl}}/api/admin/reports?type=users&page=1&pageSize=20
+Authorization: Bearer {{tokenAdmin}}
+
+### 19.4 Exportar el CSV guardado
+# Content-Type text/csv; incluye BOM UTF-8 y neutraliza fórmulas (=, +, -, @).
+GET {{baseUrl}}/api/admin/reports/{{reportId}}/export
+Authorization: Bearer {{tokenAdmin}}
+
+### 20. Configuración de la escala de calificación
+# Con notas existentes fuera del rango, reducir la escala responde
+# 409 RATING_SCALE_IN_USE hasta ajustar o eliminar esas calificaciones.
+PUT {{baseUrl}}/api/admin/config/ratings
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{
+  "maxScore": 10
+}
+
+###
+PUT {{baseUrl}}/api/admin/config/ratings
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{
+  "minScore": 1,
+  "maxScore": 5,
+  "requireAcceptedRequest": false
+}
+
+### 21. Desactivar y reactivar notificaciones
+# Mientras esté en false no se generan notificaciones nuevas; las existentes
+# se conservan.
+PUT {{baseUrl}}/api/admin/config/notifications
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{
+  "enabled": false
+}
+
+###
+PUT {{baseUrl}}/api/admin/config/notifications
+Authorization: Bearer {{tokenAdmin}}
+Content-Type: application/json
+
+{
+  "enabled": true
+}
+
+### 22. Eliminar una cuenta (borrado lógico + anonimización)
+# Cancela partidos propios y solicitudes activas, libera plazas y notifica a
+# las contrapartes. El login posterior falla con 401.
+DELETE {{baseUrl}}/api/admin/users/{{userIdGestionado}}
+Authorization: Bearer {{tokenAdmin}}
+
+### 22.1 La cuenta queda anonimizada y en estado deleted
+GET {{baseUrl}}/api/admin/users/{{userIdGestionado}}
+Authorization: Bearer {{tokenAdmin}}
+
+### 22.2 Login de la cuenta eliminada (401)
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{emailGestionado}}",
+  "password": "{{password}}"
+}
+
+### 23. Un usuario normal no puede entrar a administración (403 FORBIDDEN)
+GET {{baseUrl}}/api/admin/users
+Authorization: Bearer {{tokenSolicitante}}

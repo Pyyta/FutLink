@@ -1,0 +1,127 @@
+# FutLink · Fase 4 · Perfil de usuario (RF-03, RF-09)
+# Requiere la extensión "REST Client" de VS Code.
+# Levanta el backend con: npm run dev   (desde la raíz del repo)
+#
+# Recorre: registro de dos jugadores → perfil completo → perfil propio con
+# promedio → perfil público con teléfono oculto → edición válida e inválida
+# → visitante sin perfil completo → usuario inexistente.
+#
+# La visibilidad del teléfono tras una solicitud ACEPTADA se verifica en
+# tests/users.public.test.ts, porque RF-04 (crear solicitudes) llega en la
+# Fase 7. Hasta entonces no hay forma de aceptar una solicitud desde la API.
+
+@baseUrl = http://localhost:3000
+@emailA = jugador.a.fase4@example.com
+@emailB = jugador.b.fase4@example.com
+@password = Futbol1234
+
+### 0. Catálogo público (posiciones y localidades)
+GET {{baseUrl}}/api/catalog
+
+### 1. Registro del jugador A (RF-01)
+# @name registerA
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{emailA}}",
+  "password": "{{password}}"
+}
+
+@tokenA = {{registerA.response.body.accessToken}}
+@userAId = {{registerA.response.body.user.id}}
+
+### 2. Completar perfil de A (RF-02)
+# positionIds: 1=portero, 2=defensa, 3=mediocampista, 4=delantero
+PUT {{baseUrl}}/api/me/profile
+Authorization: Bearer {{tokenA}}
+Content-Type: application/json
+
+{
+  "name": "Ana Pérez",
+  "phone": "300 123 4567",
+  "locality": "Suba",
+  "positionIds": [1, 3]
+}
+
+### 3. Perfil propio: incluye rating { average: null, count: 0 }
+GET {{baseUrl}}/api/me
+Authorization: Bearer {{tokenA}}
+
+### 4. Editar perfil (RF-03): nombre, localidad, teléfono y posiciones
+PUT {{baseUrl}}/api/me/profile
+Authorization: Bearer {{tokenA}}
+Content-Type: application/json
+
+{
+  "name": "Ana María Pérez",
+  "phone": "310 987 6543",
+  "locality": "Kennedy",
+  "positionIds": [2, 4]
+}
+
+### 5. Edición inválida: 400 y los datos anteriores se conservan (RF-03)
+PUT {{baseUrl}}/api/me/profile
+Authorization: Bearer {{tokenA}}
+Content-Type: application/json
+
+{
+  "name": "No Debe Guardarse",
+  "phone": "310 987 6543",
+  "locality": "Localidad Inexistente",
+  "positionIds": [1]
+}
+
+### 6. Verificar que la edición inválida no cambió nada
+GET {{baseUrl}}/api/me
+Authorization: Bearer {{tokenA}}
+
+### 7. Registro del jugador B
+# @name registerB
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{emailB}}",
+  "password": "{{password}}"
+}
+
+@tokenB = {{registerB.response.body.accessToken}}
+
+### 8. Completar perfil de B
+PUT {{baseUrl}}/api/me/profile
+Authorization: Bearer {{tokenB}}
+Content-Type: application/json
+
+{
+  "name": "Bruno Díaz",
+  "phone": "320 555 7788",
+  "locality": "Chapinero",
+  "positionIds": [2]
+}
+
+### 9. B ve el perfil público de A (RF-09)
+# Esperado: name, locality, positions, rating y comments.
+# phone = null y phoneVisible = false (sin solicitud aceptada).
+GET {{baseUrl}}/api/users/{{userAId}}
+Authorization: Bearer {{tokenB}}
+
+### 10. A ve su propio perfil público: phoneVisible = true
+GET {{baseUrl}}/api/users/{{userAId}}
+Authorization: Bearer {{tokenA}}
+
+### 11. EXCEPCIÓN: visitante sin perfil completo (403 PROFILE_INCOMPLETE)
+# Registra un tercer usuario sin completar el perfil y usa su token aquí.
+GET {{baseUrl}}/api/users/{{userAId}}
+Authorization: Bearer {{tokenVisitante}}
+
+### 12. EXCEPCIÓN: usuario inexistente o inactivo (404 USER_NOT_FOUND)
+GET {{baseUrl}}/api/users/999999
+Authorization: Bearer {{tokenB}}
+
+### 13. EXCEPCIÓN: identificador no numérico (400 VALIDATION_ERROR)
+GET {{baseUrl}}/api/users/abc
+Authorization: Bearer {{tokenB}}
+
+### 14. EXCEPCIÓN: sin token (401 AUTH_REQUIRED)
+GET {{baseUrl}}/api/users/{{userAId}}

@@ -1,0 +1,239 @@
+# FutLink · Fase 9 · Calificaciones y comentarios (RF-10)
+# Requiere la extensión "REST Client" de VS Code.
+# Levanta el backend con: npm run dev   (desde la raíz del repo)
+#
+# Recorre: registro de dos autores y un objetivo → perfiles completos →
+# calificación con comentario → perfil público con promedio, comentarios
+# autorados y mi calificación → actualización (upsert) → segundo autor y
+# promedio → validaciones de puntuación, autocalificación, cuenta inexistente
+# y acceso sin token o sin perfil completo.
+#
+# Reglas (Fase 0): puntuación entera 1–5, comentario de máximo 240 caracteres,
+# sin autocalificación y una sola calificación por par autor→perfil. El
+# comentario es opcional: si se omite o queda vacío se guarda como NULL.
+#
+# El requisito de una solicitud aceptada previa está desactivado por defecto
+# (`ratings.require_accepted_request = false` en `systemsettings`). La Fase 10
+# expondrá su administración; mientras tanto solo cambia por configuración.
+
+@baseUrl = http://localhost:3000
+@password = Futbol1234
+@emailAutorUno = autor1.fase9@example.com
+@emailAutorDos = autor2.fase9@example.com
+@emailObjetivo = objetivo.fase9@example.com
+@emailIncompleto = incompleto.fase9@example.com
+
+### 0. Catálogo público (posiciones y localidades)
+GET {{baseUrl}}/api/catalog
+
+### 1. Registro y perfil del autor 1
+# @name registerAutorUno
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{emailAutorUno}}",
+  "password": "{{password}}"
+}
+
+@tokenAutorUno = {{registerAutorUno.response.body.accessToken}}
+@userIdAutorUno = {{registerAutorUno.response.body.user.id}}
+
+###
+PUT {{baseUrl}}/api/me/profile
+Authorization: Bearer {{tokenAutorUno}}
+Content-Type: application/json
+
+{
+  "name": "Andrea Autora Uno",
+  "phone": "303 200 0001",
+  "locality": "Chapinero",
+  "positionIds": [1, 4]
+}
+
+### 2. Registro y perfil del autor 2
+# @name registerAutorDos
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{emailAutorDos}}",
+  "password": "{{password}}"
+}
+
+@tokenAutorDos = {{registerAutorDos.response.body.accessToken}}
+@userIdAutorDos = {{registerAutorDos.response.body.user.id}}
+
+###
+PUT {{baseUrl}}/api/me/profile
+Authorization: Bearer {{tokenAutorDos}}
+Content-Type: application/json
+
+{
+  "name": "Bruno Autor Dos",
+  "phone": "303 200 0002",
+  "locality": "Suba",
+  "positionIds": [2, 3]
+}
+
+### 3. Registro y perfil del objetivo
+# @name registerObjetivo
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{emailObjetivo}}",
+  "password": "{{password}}"
+}
+
+@tokenObjetivo = {{registerObjetivo.response.body.accessToken}}
+@userIdObjetivo = {{registerObjetivo.response.body.user.id}}
+
+###
+PUT {{baseUrl}}/api/me/profile
+Authorization: Bearer {{tokenObjetivo}}
+Content-Type: application/json
+
+{
+  "name": "Objetivo Fase9",
+  "phone": "303 200 0003",
+  "locality": "Kennedy",
+  "positionIds": [1, 2]
+}
+
+### 4. Autor 1 califica al objetivo (200, pending→creada)
+# Devuelve la calificación guardada y el promedio ya recalculado.
+# @name ratePrimera
+PUT {{baseUrl}}/api/users/{{userIdObjetivo}}/rating
+Authorization: Bearer {{tokenAutorUno}}
+Content-Type: application/json
+
+{
+  "score": 5,
+  "comment": "Muy buen jugador, siempre puntual"
+}
+
+### 5. Perfil público del objetivo visto por el autor 1
+# `comments` incluye al autor; `myRating` trae la calificación del visitante.
+GET {{baseUrl}}/api/users/{{userIdObjetivo}}
+Authorization: Bearer {{tokenAutorUno}}
+
+### 6. El autor 1 actualiza su calificación (upsert, sin duplicar)
+# Debe conservar el mismo id y `createdAt`; count sigue en 1.
+PUT {{baseUrl}}/api/users/{{userIdObjetivo}}/rating
+Authorization: Bearer {{tokenAutorUno}}
+Content-Type: application/json
+
+{
+  "score": 3,
+  "comment": "Cumplió, aunque llegó tarde"
+}
+
+### 7. Autor 2 califica al objetivo
+# Con las notas 3 y 4, el promedio queda en 3.5 con count 2.
+PUT {{baseUrl}}/api/users/{{userIdObjetivo}}/rating
+Authorization: Bearer {{tokenAutorDos}}
+Content-Type: application/json
+
+{
+  "score": 4,
+  "comment": "Buen juego en equipo"
+}
+
+### 8. Perfil visto por el autor 2
+# `myRating` debe ser la nota del autor 2, no la del autor 1.
+GET {{baseUrl}}/api/users/{{userIdObjetivo}}
+Authorization: Bearer {{tokenAutorDos}}
+
+### 9. El promedio también aparece en la búsqueda de jugadores (RF-05)
+GET {{baseUrl}}/api/users?name=Objetivo%20Fase9
+Authorization: Bearer {{tokenAutorUno}}
+
+### 10. Autocalificación (403 SELF_RATING_NOT_ALLOWED)
+PUT {{baseUrl}}/api/users/{{userIdAutorUno}}/rating
+Authorization: Bearer {{tokenAutorUno}}
+Content-Type: application/json
+
+{
+  "score": 5,
+  "comment": "No permitido"
+}
+
+### 11. Puntuación fuera de rango (400 VALIDATION_ERROR)
+PUT {{baseUrl}}/api/users/{{userIdObjetivo}}/rating
+Authorization: Bearer {{tokenAutorUno}}
+Content-Type: application/json
+
+{
+  "score": 6,
+  "comment": "Fuera de rango"
+}
+
+### 12. Comentario opcional (200, comment = null)
+# Un comentario en blanco también se normaliza a null.
+PUT {{baseUrl}}/api/users/{{userIdObjetivo}}/rating
+Authorization: Bearer {{tokenAutorUno}}
+Content-Type: application/json
+
+{
+  "score": 3,
+  "comment": "   "
+}
+
+### 13. Usuario inexistente (404 USER_NOT_FOUND)
+PUT {{baseUrl}}/api/users/999999/rating
+Authorization: Bearer {{tokenAutorUno}}
+Content-Type: application/json
+
+{
+  "score": 5
+}
+
+### 14. Identificador inválido (400 VALIDATION_ERROR)
+PUT {{baseUrl}}/api/users/abc/rating
+Authorization: Bearer {{tokenAutorUno}}
+Content-Type: application/json
+
+{
+  "score": 5
+}
+
+### 15. Sin token (401 AUTH_REQUIRED)
+PUT {{baseUrl}}/api/users/{{userIdObjetivo}}/rating
+Content-Type: application/json
+
+{
+  "score": 5
+}
+
+### 16. Visitante con perfil incompleto (403 PROFILE_INCOMPLETE)
+# @name registerIncompleto
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{emailIncompleto}}",
+  "password": "{{password}}"
+}
+
+@tokenIncompleto = {{registerIncompleto.response.body.accessToken}}
+
+###
+PUT {{baseUrl}}/api/users/{{userIdObjetivo}}/rating
+Authorization: Bearer {{tokenIncompleto}}
+Content-Type: application/json
+
+{
+  "score": 5
+}
+
+### 17. Verificación del promedio tras el upsert y el comentario vacío
+# Autor 1: 3 (sin comentario), autor 2: 4 → average 3.5, count 2,
+# y solo aparece el comentario del autor 2 en `comments`.
+GET {{baseUrl}}/api/users/{{userIdObjetivo}}
+Authorization: Bearer {{tokenAutorUno}}
+
+# Nota de configuración: con `ratings.require_accepted_request = true`, una
+# calificación sin solicitud aceptada responde 403
+# RATING_REQUIRES_ACCEPTED_REQUEST. Las pruebas automatizadas cubren ambos
+# valores del flag; el valor por defecto es false.

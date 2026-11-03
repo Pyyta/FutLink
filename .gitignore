@@ -1,0 +1,24 @@
+# Dependencias
+node_modules/
+
+# Compilados
+dist/
+coverage/
+*.tsbuildinfo
+
+# Variables de entorno (nunca versionar secretos)
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# Buzón de correo simulado en desarrollo (puede contener códigos temporales)
+.mail-outbox/
+
+# Sistema operativo / editores
+.DS_Store
+Thumbs.db
+.idea/

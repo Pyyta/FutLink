@@ -1,0 +1,225 @@
+# FutLink · Fase 8 · Notificaciones (RF-08, RNF-02)
+# Requiere la extensión "REST Client" de VS Code.
+# Levanta el backend con: npm run dev   (desde la raíz del repo)
+#
+# Recorre: registro de un organizador y dos jugadores → publicar partido con
+# dos vacantes → dos solicitudes → aceptar una (notifica al emisor) → listar
+# pendientes → marcar como leída → cancelar la aceptada (notifica al
+# organizador) → cancelar el partido (notifica al emisor pendiente) →
+# autorización, filtros y validaciones.
+#
+# No hay WebSockets: el frontend consulta GET /api/notifications al enfocar la
+# app o navegar. Las no leídas quedan pendientes entre sesiones.
+#
+# Las fechas usan 2037 para no chocar con otras colecciones.
+
+@baseUrl = http://localhost:3000
+@password = Futbol1234
+@emailOrganizer = organizador.fase8@example.com
+@emailPlayerOne = jugador1.fase8@example.com
+@emailPlayerTwo = jugador2.fase8@example.com
+
+### 0. Catálogo público
+GET {{baseUrl}}/api/catalog
+
+### 1. Registro y perfil del organizador (RF-01, RF-02)
+# @name registerOrganizer
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{emailOrganizer}}",
+  "password": "{{password}}"
+}
+
+@tokenOrganizer = {{registerOrganizer.response.body.accessToken}}
+
+###
+PUT {{baseUrl}}/api/me/profile
+Authorization: Bearer {{tokenOrganizer}}
+Content-Type: application/json
+
+{
+  "name": "Olivia Organizadora",
+  "phone": "303 200 0001",
+  "locality": "Suba",
+  "positionIds": [2, 3]
+}
+
+### 2. Registro y perfil del jugador 1
+# @name registerPlayerOne
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{emailPlayerOne}}",
+  "password": "{{password}}"
+}
+
+@tokenPlayerOne = {{registerPlayerOne.response.body.accessToken}}
+
+###
+PUT {{baseUrl}}/api/me/profile
+Authorization: Bearer {{tokenPlayerOne}}
+Content-Type: application/json
+
+{
+  "name": "Pablo Jugador Uno",
+  "phone": "303 200 0002",
+  "locality": "Chapinero",
+  "positionIds": [1, 4]
+}
+
+### 3. Registro y perfil del jugador 2
+# @name registerPlayerTwo
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{emailPlayerTwo}}",
+  "password": "{{password}}"
+}
+
+@tokenPlayerTwo = {{registerPlayerTwo.response.body.accessToken}}
+
+###
+PUT {{baseUrl}}/api/me/profile
+Authorization: Bearer {{tokenPlayerTwo}}
+Content-Type: application/json
+
+{
+  "name": "Paula Jugadora Dos",
+  "phone": "303 200 0003",
+  "locality": "Kennedy",
+  "positionIds": [3]
+}
+
+### 4. Publicar un partido con dos vacantes
+# @name publishMatch
+POST {{baseUrl}}/api/matches
+Authorization: Bearer {{tokenOrganizer}}
+Content-Type: application/json
+
+{
+  "matchDate": "2037-05-22T19:00:00-05:00",
+  "locality": "Suba",
+  "modality": "F7",
+  "description": "Partido para probar notificaciones",
+  "positions": [{ "positionId": 1, "slots": 2 }]
+}
+
+@matchId = {{publishMatch.response.body.match.id}}
+@vacancyOne = {{publishMatch.response.body.match.vacancies[0].id}}
+@vacancyTwo = {{publishMatch.response.body.match.vacancies[1].id}}
+
+### 5. El jugador 1 solicita la primera vacante
+# @name requestOne
+POST {{baseUrl}}/api/requests
+Authorization: Bearer {{tokenPlayerOne}}
+Content-Type: application/json
+
+{
+  "type": "match",
+  "vacancyId": {{vacancyOne}}
+}
+
+### 6. El jugador 2 solicita la segunda vacante
+# @name requestTwo
+POST {{baseUrl}}/api/requests
+Authorization: Bearer {{tokenPlayerTwo}}
+Content-Type: application/json
+
+{
+  "type": "match",
+  "vacancyId": {{vacancyTwo}}
+}
+
+### 7. El organizador acepta la solicitud del jugador 1
+# Genera una notificación request_accepted para el jugador 1.
+PATCH {{baseUrl}}/api/requests/{{requestOne.response.body.request.id}}/accept
+Authorization: Bearer {{tokenOrganizer}}
+
+### 8. El jugador 1 consulta sus pendientes
+# Esperado: 1 notificación request_accepted, unreadCount 1.
+# @name notificationsPlayerOne
+GET {{baseUrl}}/api/notifications
+Authorization: Bearer {{tokenPlayerOne}}
+
+@notificationPlayerOne = {{notificationsPlayerOne.response.body.notifications[0].id}}
+
+### 9. El jugador 1 marca la notificación como leída
+# Esperado: readAt con fecha y unreadCount 0.
+PATCH {{baseUrl}}/api/notifications/{{notificationPlayerOne}}/read
+Authorization: Bearer {{tokenPlayerOne}}
+
+### 10. Pendientes vacías y historial completo
+GET {{baseUrl}}/api/notifications
+Authorization: Bearer {{tokenPlayerOne}}
+
+###
+# Esperado: total 1, unreadCount 0, la notificación con readAt.
+GET {{baseUrl}}/api/notifications?status=all
+Authorization: Bearer {{tokenPlayerOne}}
+
+### 11. El jugador 1 cancela su solicitud aceptada
+# Libera la vacante y notifica al organizador (request_cancelled).
+PATCH {{baseUrl}}/api/requests/{{requestOne.response.body.request.id}}/cancel
+Authorization: Bearer {{tokenPlayerOne}}
+
+### 12. El organizador consulta sus notificaciones
+# Esperado: 1 request_cancelled del jugador 1, unreadCount 1.
+GET {{baseUrl}}/api/notifications
+Authorization: Bearer {{tokenOrganizer}}
+
+### 13. El organizador cancela el partido
+# El jugador 2 tenía una solicitud pendiente: recibe match_cancelled.
+PATCH {{baseUrl}}/api/matches/{{matchId}}/cancel
+Authorization: Bearer {{tokenOrganizer}}
+
+### 14. El jugador 2 consulta sus notificaciones
+# Esperado: 1 match_cancelled con actor = organizador y datos del partido.
+# @name notificationsPlayerTwo
+GET {{baseUrl}}/api/notifications
+Authorization: Bearer {{tokenPlayerTwo}}
+
+@notificationPlayerTwo = {{notificationsPlayerTwo.response.body.notifications[0].id}}
+
+### 15. El organizador no recibe notificación por su propia cancelación
+# Esperado: solo la request_cancelled del paso 12.
+GET {{baseUrl}}/api/notifications?status=all
+Authorization: Bearer {{tokenOrganizer}}
+
+### 16. El jugador 2 marca su notificación como leída
+PATCH {{baseUrl}}/api/notifications/{{notificationPlayerTwo}}/read
+Authorization: Bearer {{tokenPlayerTwo}}
+
+### 17. Otro usuario no puede marcar una notificación ajena (404)
+PATCH {{baseUrl}}/api/notifications/{{notificationPlayerTwo}}/read
+Authorization: Bearer {{tokenPlayerOne}}
+
+### 18. Filtros inválidos (400)
+GET {{baseUrl}}/api/notifications?status=leidas
+Authorization: Bearer {{tokenPlayerTwo}}
+
+###
+GET {{baseUrl}}/api/notifications?page=0&pageSize=51
+Authorization: Bearer {{tokenPlayerTwo}}
+
+### 19. Sin token (401)
+GET {{baseUrl}}/api/notifications
+
+### 20. Id inválido (400) e inexistente (404)
+PATCH {{baseUrl}}/api/notifications/abc/read
+Authorization: Bearer {{tokenPlayerTwo}}
+
+###
+PATCH {{baseUrl}}/api/notifications/999999/read
+Authorization: Bearer {{tokenPlayerTwo}}
+
+### 21. Historial del jugador 2 tras marcar como leída
+GET {{baseUrl}}/api/notifications
+Authorization: Bearer {{tokenPlayerTwo}}
+
+###
+GET {{baseUrl}}/api/notifications?status=all
+Authorization: Bearer {{tokenPlayerTwo}}

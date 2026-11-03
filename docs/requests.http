@@ -1,0 +1,289 @@
+# FutLink · Fase 7 · Solicitudes (RF-06, RF-07)
+# Requiere la extensión "REST Client" de VS Code.
+# Levanta el backend con: npm run dev   (desde la raíz del repo)
+#
+# Recorre: catálogo → registro de un organizador y tres jugadores → perfiles
+# completos → publicar partido con dos vacantes → solicitudes de partido
+# (incluido duplicado 409) → bandeja "Administrar solicitudes" separada por
+# tipo → aceptar (ocupa la vacante) → rechazar → cancelar una aceptada
+# (libera la vacante) → volver a solicitar tras cancelar → solicitud entre
+# jugadores → aceptar → cancelar → visibilidad del teléfono → validaciones.
+#
+# La confirmación previa es de la UI (Figma); la API crea la solicitud cuando
+# recibe el POST. Las notificaciones (RF-08) se prueban en notifications.http;
+# aquí solo se persiste el estado y el historial.
+#
+# Los títulos de posición van en minúsculas: portero, defensa, mediocampista,
+# delantero. Las fechas usan 2036 para no chocar con otras colecciones.
+
+@baseUrl = http://localhost:3000
+@password = Futbol1234
+@emailOrganizer = organizador.fase7@example.com
+@emailPlayerOne = jugador1.fase7@example.com
+@emailPlayerTwo = jugador2.fase7@example.com
+@emailPlayerThree = jugador3.fase7@example.com
+
+### 0. Catálogo público (posiciones y localidades)
+GET {{baseUrl}}/api/catalog
+
+### 1. Registro y perfil del organizador (RF-01, RF-02)
+# @name registerOrganizer
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{emailOrganizer}}",
+  "password": "{{password}}"
+}
+
+@tokenOrganizer = {{registerOrganizer.response.body.accessToken}}
+
+###
+PUT {{baseUrl}}/api/me/profile
+Authorization: Bearer {{tokenOrganizer}}
+Content-Type: application/json
+
+{
+  "name": "Olivia Organizadora",
+  "phone": "302 100 0001",
+  "locality": "Suba",
+  "positionIds": [2, 3]
+}
+
+### 2. Registro y perfil del jugador 1
+# @name registerPlayerOne
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{emailPlayerOne}}",
+  "password": "{{password}}"
+}
+
+@tokenPlayerOne = {{registerPlayerOne.response.body.accessToken}}
+
+###
+PUT {{baseUrl}}/api/me/profile
+Authorization: Bearer {{tokenPlayerOne}}
+Content-Type: application/json
+
+{
+  "name": "Pablo Jugador Uno",
+  "phone": "302 100 0002",
+  "locality": "Chapinero",
+  "positionIds": [1, 4]
+}
+
+### 3. Registro y perfil del jugador 2
+# @name registerPlayerTwo
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{emailPlayerTwo}}",
+  "password": "{{password}}"
+}
+
+@tokenPlayerTwo = {{registerPlayerTwo.response.body.accessToken}}
+
+###
+PUT {{baseUrl}}/api/me/profile
+Authorization: Bearer {{tokenPlayerTwo}}
+Content-Type: application/json
+
+{
+  "name": "Paula Jugadora Dos",
+  "phone": "302 100 0003",
+  "locality": "Kennedy",
+  "positionIds": [3]
+}
+
+### 4. Registro y perfil del jugador 3
+# @name registerPlayerThree
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{emailPlayerThree}}",
+  "password": "{{password}}"
+}
+
+@tokenPlayerThree = {{registerPlayerThree.response.body.accessToken}}
+
+###
+PUT {{baseUrl}}/api/me/profile
+Authorization: Bearer {{tokenPlayerThree}}
+Content-Type: application/json
+
+{
+  "name": "Tomás Jugador Tres",
+  "phone": "302 100 0004",
+  "locality": "Usaquén",
+  "positionIds": [2, 4]
+}
+
+### 5. Publicar un partido con dos vacantes
+# @name publishMatch
+POST {{baseUrl}}/api/matches
+Authorization: Bearer {{tokenOrganizer}}
+Content-Type: application/json
+
+{
+  "matchDate": "2036-04-18T19:00:00-05:00",
+  "locality": "Suba",
+  "modality": "F7",
+  "description": "Partido para probar solicitudes",
+  "positions": [{ "positionId": 1, "slots": 2 }]
+}
+
+@matchId = {{publishMatch.response.body.match.id}}
+@vacancyOne = {{publishMatch.response.body.match.vacancies[0].id}}
+@vacancyTwo = {{publishMatch.response.body.match.vacancies[1].id}}
+
+### 6. Detalle del partido (vacantes y plazas libres)
+GET {{baseUrl}}/api/matches/{{matchId}}
+Authorization: Bearer {{tokenPlayerOne}}
+
+### 7. Jugador 1 solicita la primera vacante (201, pending)
+# @name requestMatchOne
+POST {{baseUrl}}/api/requests
+Authorization: Bearer {{tokenPlayerOne}}
+Content-Type: application/json
+
+{
+  "type": "match",
+  "vacancyId": {{vacancyOne}}
+}
+
+@matchRequestOne = {{requestMatchOne.response.body.request.id}}
+
+### 8. Jugador 2 también solicita la primera vacante (201, pending)
+# @name requestMatchTwo
+POST {{baseUrl}}/api/requests
+Authorization: Bearer {{tokenPlayerTwo}}
+Content-Type: application/json
+
+{
+  "type": "match",
+  "vacancyId": {{vacancyOne}}
+}
+
+@matchRequestTwo = {{requestMatchTwo.response.body.request.id}}
+
+### 9. Duplicado pendiente del jugador 1 (409 REQUEST_ALREADY_EXISTS)
+# Lo impide el índice único parcial de la base, no solo el servicio.
+POST {{baseUrl}}/api/requests
+Authorization: Bearer {{tokenPlayerOne}}
+Content-Type: application/json
+
+{
+  "type": "match",
+  "vacancyId": {{vacancyOne}}
+}
+
+### 10. "Administrar solicitudes" del organizador: recibidas de partidos
+GET {{baseUrl}}/api/requests?box=received&type=match
+Authorization: Bearer {{tokenOrganizer}}
+
+### 11. "Administrar solicitudes" del organizador: recibidas de jugadores
+GET {{baseUrl}}/api/requests?box=received&type=player
+Authorization: Bearer {{tokenOrganizer}}
+
+### 12. Aceptar la solicitud del jugador 1 (200, ocupa la vacante)
+# El partido sigue available porque queda la segunda vacante libre.
+PATCH {{baseUrl}}/api/requests/{{matchRequestOne}}/accept
+Authorization: Bearer {{tokenOrganizer}}
+
+### 13. Rechazar la solicitud del jugador 2 (200, no ocupa nada)
+PATCH {{baseUrl}}/api/requests/{{matchRequestTwo}}/reject
+Authorization: Bearer {{tokenOrganizer}}
+
+### 14. Bandeja enviada del jugador 1 (accepted)
+GET {{baseUrl}}/api/requests?box=sent&type=match
+Authorization: Bearer {{tokenPlayerOne}}
+
+### 15. El jugador 1 cancela su solicitud aceptada (RF-07)
+# Libera la vacante. Si el partido estuviera completo, volvería a available.
+PATCH {{baseUrl}}/api/requests/{{matchRequestOne}}/cancel
+Authorization: Bearer {{tokenPlayerOne}}
+
+### 16. Volver a solicitar tras cancelar (201)
+# El índice único solo bloquea solicitudes pending/accepted.
+# @name requestMatchAgain
+POST {{baseUrl}}/api/requests
+Authorization: Bearer {{tokenPlayerOne}}
+Content-Type: application/json
+
+{
+  "type": "match",
+  "vacancyId": {{vacancyOne}}
+}
+
+@matchRequestAgain = {{requestMatchAgain.response.body.request.id}}
+
+### 17. Solicitud entre jugadores: jugador 3 → jugador 1 (201, pending)
+# @name requestPlayer
+POST {{baseUrl}}/api/requests
+Authorization: Bearer {{tokenPlayerThree}}
+Content-Type: application/json
+
+{
+  "type": "player",
+  "targetUserId": {{registerPlayerOne.response.body.user.id}}
+}
+
+@playerRequest = {{requestPlayer.response.body.request.id}}
+
+### 18. Duplicado entre jugadores (409 REQUEST_ALREADY_EXISTS)
+POST {{baseUrl}}/api/requests
+Authorization: Bearer {{tokenPlayerThree}}
+Content-Type: application/json
+
+{
+  "type": "player",
+  "targetUserId": {{registerPlayerOne.response.body.user.id}}
+}
+
+### 19. Bandeja recibida de jugadores del jugador 1
+GET {{baseUrl}}/api/requests?box=received&type=player
+Authorization: Bearer {{tokenPlayerOne}}
+
+### 20. El jugador 1 acepta la solicitud entre jugadores (200)
+PATCH {{baseUrl}}/api/requests/{{playerRequest}}/accept
+Authorization: Bearer {{tokenPlayerOne}}
+
+### 21. Con la solicitud aceptada, el teléfono deja de estar oculto (RF-09)
+GET {{baseUrl}}/api/users/{{registerPlayerThree.response.body.user.id}}
+Authorization: Bearer {{tokenPlayerOne}}
+
+### 22. El jugador 3 cancela su solicitud aceptada (RF-07)
+PATCH {{baseUrl}}/api/requests/{{playerRequest}}/cancel
+Authorization: Bearer {{tokenPlayerThree}}
+
+### 23. Un tercero no puede cancelar una solicitud ajena (403 FORBIDDEN)
+PATCH {{baseUrl}}/api/requests/{{matchRequestAgain}}/cancel
+Authorization: Bearer {{tokenPlayerTwo}}
+
+### 24. Un receptor no puede aceptar dos veces (409 REQUEST_NOT_PENDING)
+PATCH {{baseUrl}}/api/requests/{{matchRequestTwo}}/accept
+Authorization: Bearer {{tokenOrganizer}}
+
+### 25. Filtros por estado y paginación
+GET {{baseUrl}}/api/requests?box=received&type=match&state=accepted&page=1&pageSize=10
+Authorization: Bearer {{tokenOrganizer}}
+
+### 26. Validaciones de consulta (400 VALIDATION_ERROR)
+GET {{baseUrl}}/api/requests?box=other
+Authorization: Bearer {{tokenOrganizer}}
+
+### 27. Cuerpo inválido (400 VALIDATION_ERROR)
+POST {{baseUrl}}/api/requests
+Authorization: Bearer {{tokenPlayerTwo}}
+Content-Type: application/json
+
+{
+  "type": "match"
+}
+
+### 28. Sin autenticación (401 AUTH_REQUIRED)
+GET {{baseUrl}}/api/requests

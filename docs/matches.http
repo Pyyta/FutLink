@@ -1,0 +1,266 @@
+# FutLink · Fase 5 · Partidos y búsqueda (RF-04 + Publicar partido)
+# Requiere la extensión "REST Client" de VS Code.
+# Levanta el backend con: npm run dev   (desde la raíz del repo)
+#
+# Recorre: catálogo → registro de organizador y visitante → perfiles completos
+# → publicar partido con vacantes y coordenadas → buscar con filtros, paginación
+# y cercanía → detalle → validaciones → cancelación por un tercero (403) y por
+# el organizador (200) → el partido desaparece de la búsqueda.
+#
+# Las solicitudes (RF-06/RF-07) llegan en la Fase 7. Por eso aquí no se puede
+# crear una solicitud pendiente/aceptada: la liberación de vacantes y la
+# cancelación de solicitudes activas se verifican en tests/matches.cancel.test.ts.
+#
+# Las fechas usan 2035 para no chocar con datos de pruebas anteriores.
+# Los títulos de posición del catálogo van en minúsculas: portero, defensa,
+# mediocampista, delantero.
+
+@baseUrl = http://localhost:3000
+@emailOrganizer = organizador.fase5@example.com
+@emailViewer = visitante.fase5@example.com
+@password = Futbol1234
+
+### 0. Catálogo público (posiciones y localidades)
+GET {{baseUrl}}/api/catalog
+
+### 1. Registro del organizador (RF-01)
+# @name registerOrganizer
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{emailOrganizer}}",
+  "password": "{{password}}"
+}
+
+@tokenOrganizer = {{registerOrganizer.response.body.accessToken}}
+
+### 2. Completar perfil del organizador (RF-02)
+PUT {{baseUrl}}/api/me/profile
+Authorization: Bearer {{tokenOrganizer}}
+Content-Type: application/json
+
+{
+  "name": "Oscar Organizador",
+  "phone": "300 555 0101",
+  "locality": "Suba",
+  "positionIds": [2, 3]
+}
+
+### 3. Registro del visitante (RF-01)
+# @name registerViewer
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{emailViewer}}",
+  "password": "{{password}}"
+}
+
+@tokenViewer = {{registerViewer.response.body.accessToken}}
+
+### 4. Completar perfil del visitante (RF-02)
+PUT {{baseUrl}}/api/me/profile
+Authorization: Bearer {{tokenViewer}}
+Content-Type: application/json
+
+{
+  "name": "Valentina Visitante",
+  "phone": "300 555 0202",
+  "locality": "Chapinero",
+  "positionIds": [1, 4]
+}
+
+### 5. Publicar partido (201) con 3 vacantes y ubicación
+# latitude/longitude son opcionales (SUPUESTO de Fase 5): habilitan el orden
+# por cercanía con PostGIS. Si se envía una, debe enviarse la otra.
+# @name publishMatch
+POST {{baseUrl}}/api/matches
+Authorization: Bearer {{tokenOrganizer}}
+Content-Type: application/json
+
+{
+  "matchDate": "2035-03-10T19:00:00-05:00",
+  "locality": "Suba",
+  "modality": "F7",
+  "description": "Partido amistoso de los martes",
+  "positions": [
+    { "positionId": 1, "slots": 2 },
+    { "positionId": 3, "slots": 1 }
+  ],
+  "latitude": 4.711,
+  "longitude": -74.0721
+}
+
+@matchId = {{publishMatch.response.body.match.id}}
+
+### 6. Publicar un segundo partido para comparar cercanía
+# @name publishFarMatch
+POST {{baseUrl}}/api/matches
+Authorization: Bearer {{tokenOrganizer}}
+Content-Type: application/json
+
+{
+  "matchDate": "2035-03-10T20:00:00-05:00",
+  "locality": "Kennedy",
+  "modality": "F11",
+  "positions": [{ "positionId": 4, "slots": 2 }],
+  "latitude": 4.62,
+  "longitude": -74.15
+}
+
+@farMatchId = {{publishFarMatch.response.body.match.id}}
+
+### 7. Publicar un tercer partido sin ubicación (queda al final en cercanía)
+# @name publishNoLocationMatch
+POST {{baseUrl}}/api/matches
+Authorization: Bearer {{tokenOrganizer}}
+Content-Type: application/json
+
+{
+  "matchDate": "2035-03-10T21:00:00-05:00",
+  "locality": "Usaquén",
+  "positions": [{ "positionId": 2, "slots": 1 }]
+}
+
+### 8. Buscar todos los partidos futuros disponibles (RF-04)
+# Respuesta: { matches, page, pageSize, total, totalPages }
+# Cada partido incluye plazas libres, posiciones agrupadas, organizador
+# (sin teléfono ni correo), isOwner y distanceMeters (null sin coordenadas).
+GET {{baseUrl}}/api/matches?page=1&pageSize=10
+Authorization: Bearer {{tokenViewer}}
+
+### 9. Buscar por zona (sin distinguir mayúsculas)
+GET {{baseUrl}}/api/matches?locality=suba
+Authorization: Bearer {{tokenViewer}}
+
+### 10. Buscar por fecha (día calendario de Bogotá, UTC-05:00)
+GET {{baseUrl}}/api/matches?date=2035-03-10
+Authorization: Bearer {{tokenViewer}}
+
+### 11. Buscar por posición con plaza libre (1=portero)
+GET {{baseUrl}}/api/matches?date=2035-03-10&positionId=1
+Authorization: Bearer {{tokenViewer}}
+
+### 12. Ordenar por cercanía a un punto (PostGIS)
+# Orden esperado: cercano, lejano, sin ubicación (distanceMeters null).
+GET {{baseUrl}}/api/matches?date=2035-03-10&latitude=4.711&longitude=-74.0721
+Authorization: Bearer {{tokenViewer}}
+
+### 13. Paginación
+GET {{baseUrl}}/api/matches?date=2035-03-10&page=2&pageSize=1
+Authorization: Bearer {{tokenViewer}}
+
+### 14. Detalle del partido (200) con vacantes y canCancel
+# canCancel es true solo para el organizador y mientras no esté cancelado.
+GET {{baseUrl}}/api/matches/{{matchId}}
+Authorization: Bearer {{tokenViewer}}
+
+### 15. Sin coincidencias: lista vacía, total 0, totalPages 0
+GET {{baseUrl}}/api/matches?date=2035-12-31
+Authorization: Bearer {{tokenViewer}}
+
+### 16. Sin autenticación (401 AUTH_REQUIRED)
+GET {{baseUrl}}/api/matches
+
+### 17. Con token pero sin perfil completo (403 PROFILE_INCOMPLETE)
+# @name registerIncomplete
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "incompleto.fase5@example.com",
+  "password": "{{password}}"
+}
+
+###
+GET {{baseUrl}}/api/matches
+Authorization: Bearer {{registerIncomplete.response.body.accessToken}}
+
+### 18. Publicación inválida: fecha pasada (400 MATCH_DATE_IN_PAST)
+POST {{baseUrl}}/api/matches
+Authorization: Bearer {{tokenOrganizer}}
+Content-Type: application/json
+
+{
+  "matchDate": "2020-01-01T19:00:00-05:00",
+  "locality": "Suba",
+  "positions": [{ "positionId": 1, "slots": 1 }]
+}
+
+### 19. Publicación inválida: localidad inexistente (400 VALIDATION_ERROR)
+POST {{baseUrl}}/api/matches
+Authorization: Bearer {{tokenOrganizer}}
+Content-Type: application/json
+
+{
+  "matchDate": "2035-03-11T19:00:00-05:00",
+  "locality": "Ciudad Inventada",
+  "positions": [{ "positionId": 1, "slots": 1 }]
+}
+
+### 20. Publicación inválida: posición inexistente (400)
+POST {{baseUrl}}/api/matches
+Authorization: Bearer {{tokenOrganizer}}
+Content-Type: application/json
+
+{
+  "matchDate": "2035-03-11T19:00:00-05:00",
+  "locality": "Suba",
+  "positions": [{ "positionId": 999999, "slots": 1 }]
+}
+
+### 21. Publicación inválida: más de 30 plazas (400)
+POST {{baseUrl}}/api/matches
+Authorization: Bearer {{tokenOrganizer}}
+Content-Type: application/json
+
+{
+  "matchDate": "2035-03-11T19:00:00-05:00",
+  "locality": "Suba",
+  "positions": [{ "positionId": 1, "slots": 31 }]
+}
+
+### 22. Publicación inválida: solo una coordenada (400)
+POST {{baseUrl}}/api/matches
+Authorization: Bearer {{tokenOrganizer}}
+Content-Type: application/json
+
+{
+  "matchDate": "2035-03-11T19:00:00-05:00",
+  "locality": "Suba",
+  "positions": [{ "positionId": 1, "slots": 1 }],
+  "latitude": 4.711
+}
+
+### 23. Filtros inválidos en la búsqueda (400)
+GET {{baseUrl}}/api/matches?date=2035-13-40
+Authorization: Bearer {{tokenViewer}}
+
+### 24. Filtros inválidos: página fuera de rango (400)
+GET {{baseUrl}}/api/matches?page=0
+Authorization: Bearer {{tokenViewer}}
+
+### 25. Un tercero no puede cancelar el partido (403 FORBIDDEN)
+PATCH {{baseUrl}}/api/matches/{{matchId}}/cancel
+Authorization: Bearer {{tokenViewer}}
+
+### 26. El organizador cancela (200) y se liberan las vacantes
+PATCH {{baseUrl}}/api/matches/{{matchId}}/cancel
+Authorization: Bearer {{tokenOrganizer}}
+
+### 27. Cancelar de nuevo (409 MATCH_ALREADY_CANCELLED)
+PATCH {{baseUrl}}/api/matches/{{matchId}}/cancel
+Authorization: Bearer {{tokenOrganizer}}
+
+### 28. El partido cancelado ya no aparece en la búsqueda
+GET {{baseUrl}}/api/matches?date=2035-03-10
+Authorization: Bearer {{tokenViewer}}
+
+### 29. Partido inexistente (404 MATCH_NOT_FOUND)
+GET {{baseUrl}}/api/matches/999999
+Authorization: Bearer {{tokenViewer}}
+
+### 30. Identificador inválido (400)
+GET {{baseUrl}}/api/matches/abc
+Authorization: Bearer {{tokenViewer}}
