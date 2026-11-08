@@ -748,6 +748,32 @@ const esCO = {
       dismiss: 'Descartar aviso',
     },
   },
+  server: {
+    title: 'Servidor',
+    subtitle: 'Configura la dirección de la API a la que se conecta la app.',
+    linkLabel: 'Servidor: {{host}}',
+    current: 'Servidor actual',
+    builtIn: 'Predeterminado',
+    urlLabel: 'URL de la API',
+    urlPlaceholder: 'https://tu-servidor.com/api',
+    urlHelp:
+      'Si omites la ruta se usa /api. Al cambiar de servidor se cierra la sesión.',
+    testAction: 'Probar conexión',
+    testing: 'Probando…',
+    testOk: 'Conexión correcta. La base de datos responde.',
+    testDbDown: 'El servidor responde, pero la base de datos no está disponible.',
+    testHttpError: 'El servidor respondió con estado {{status}}.',
+    testNetworkError: 'No se pudo conectar con ese servidor.',
+    invalidUrl:
+      'Escribe una URL válida, por ejemplo https://mi-servidor.com/api.',
+    mixedContent:
+      'Una app abierta por HTTPS no puede conectarse a una API HTTP. Usa una URL https:// o abre la app por HTTP en la red local.',
+    saveAction: 'Guardar servidor',
+    resetAction: 'Restaurar predeterminado',
+    saved: 'Servidor actualizado. Inicia sesión de nuevo.',
+    resetDone: 'Se restauró el servidor predeterminado.',
+    backAction: 'Volver',
+  },
   language: {
     label: 'Idioma',
     esCO: 'Español (Colombia)',

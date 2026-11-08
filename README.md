@@ -235,14 +235,16 @@ Abre `http://localhost:5173`.
 ### 7. Build de producción
 
 ```powershell
-npm run build
-npm run build:web
+npm run bundle
+npm start
 ```
 
 - Backend compilado en `backend/dist/`; se inicia con `npm start`.
-- Frontend compilado en `frontend/dist/`; se puede previsualizar con `npm run preview -w frontend` en `http://localhost:4173`.
+- Frontend compilado en `frontend/dist/`. Con `SERVE_WEB=true` (predeterminado) el backend sirve la PWA en el mismo origen, en `http://localhost:3000`.
+- `VITE_API_URL` se incorpora en tiempo de build, pero en producción la app usa por defecto el mismo origen (`/api`). La URL se puede cambiar en el dispositivo desde `/servidor` sin recompilar.
+- Para publicar la PWA en otro dominio, sirve `frontend/dist` por separado, ajusta `VITE_API_URL` antes de compilar y agrega el origen del frontend a `CORS_ORIGIN`.
 
-`VITE_API_URL` se incorpora en tiempo de build. Si el frontend y la API quedan en dominios distintos, configura esa variable antes de compilar y agrega el origen del frontend a `CORS_ORIGIN`.
+Para instalar la app en Android e iOS y conectarla a tu PC o a otra máquina, sigue [docs/movil-y-servidor.md](docs/movil-y-servidor.md).
 
 ---
 
@@ -256,6 +258,7 @@ Todos se ejecutan desde la raíz del monorepo.
 | `npm run dev:web` | Frontend con Vite en el puerto 5173. |
 | `npm run build` | Compila el backend con TypeScript. |
 | `npm run build:web` | Typecheck y build de producción del frontend. |
+| `npm run bundle` | Compila backend y frontend en un solo paso. |
 | `npm start` | Ejecuta el backend compilado. |
 | `npm test` | Pruebas de backend con Vitest. |
 | `npm run test:web` | Pruebas de frontend con Vitest. |
@@ -278,6 +281,8 @@ Todos se ejecutan desde la raíz del monorepo.
 | --- | --- | --- |
 | `NODE_ENV` | No | `development`, `test` o `production`. Por defecto `development`. |
 | `PORT` | No | Puerto HTTP. Por defecto `3000`. |
+| `HOST` | No | Interfaz de escucha. Por defecto `0.0.0.0`, necesario para acceder desde el celular en la red local. |
+| `SERVE_WEB` | No | `true` (predeterminado) sirve `frontend/dist` desde la API; `false` deja solo la API. |
 | `CORS_ORIGIN` | No | Orígenes permitidos separados por coma. Por defecto `http://localhost:5173`. |
 | `LOG_LEVEL` | No | Nivel de pino. Por defecto `info`. |
 | `BODY_LIMIT` | No | Límite del cuerpo, por ejemplo `1mb`. |
@@ -303,7 +308,7 @@ Todos se ejecutan desde la raíz del monorepo.
 
 | Variable | Obligatoria | Descripción |
 | --- | --- | --- |
-| `VITE_API_URL` | No | URL base de la API sin barra final. Por defecto `http://localhost:3000/api`. |
+| `VITE_API_URL` | No | URL base de la API usada en desarrollo. En producción servida por el backend se usa el mismo origen; el dispositivo puede cambiarla desde `/servidor`. |
 
 ---
 
@@ -469,7 +474,8 @@ Las pruebas de frontend usan Vitest, Testing Library y jsdom, con un helper `ren
 
 - Manifest en español con `display: standalone`, orientación vertical e iconos 192, 512 y maskable.
 - Workbox precachea el shell (HTML, JS, CSS, imágenes y fuentes) y **nunca cachea `/api/`**: las peticiones a la API usan `NetworkOnly`.
-- El service worker se genera en el build; en desarrollo está desactivado. Para probar la instalación usa `npm run build:web` y `npm run preview -w frontend`.
+- El service worker se genera en el build; en desarrollo está desactivado. `npm run preview -w frontend` sirve el build en la red local y redirige `/api` al backend.
+- Instalable en Android (Chrome) e iOS (Safari) cuando se sirve por HTTPS. Guía completa: [docs/movil-y-servidor.md](docs/movil-y-servidor.md).
 - Interfaz mobile-first con marco de 430 px, tarjetas claras, primario esmeralda y navegación inferior.
 - Referencia visual del prototipo: [Figma de FutLink](https://www.figma.com/design/ZTqUwCqTg6V8s6xGhbzCKa/Futlink?node-id=0-1&p=f) (solo lectura).
 
@@ -489,6 +495,7 @@ Las pruebas de frontend usan Vitest, Testing Library y jsdom, con un helper `ren
 /perfil               Perfil propio
 /perfil/editar        Edición de perfil
 /admin                Panel de administración
+/servidor             Configuración de la API y prueba de conexión
 /sin-acceso           Acceso denegado
 *                     404
 ```
@@ -524,6 +531,9 @@ Las pruebas de frontend usan Vitest, Testing Library y jsdom, con un helper `ren
 - **Correo:** en desarrollo solo existe el buzón simulado. No se incluye un proveedor real de correo.
 - **Sesión:** se guarda en `localStorage` y el cliente distingue entre refresh inválido (limpia la sesión) y fallo de red (la conserva).
 - **Build:** el bundle principal supera los 500 kB y Vite emite una advertencia no bloqueante. Si se requiere optimizar, se puede aplicar code splitting por rutas.
+- **Entrega móvil:** se entrega como PWA instalable en Android e iOS. No se generan APK ni `.ipa`: compilar para iOS exige macOS, Xcode y una cuenta de Apple Developer.
+- **Servidor configurable:** la app puede apuntar a otra API desde `/servidor`; la elección se guarda en `localStorage['futlink.api-url']` y cambiar de servidor cierra la sesión. Para permitirlo, la CSP admite conexiones `http:` y `https:`.
+- **Túnel:** la URL del túnel rápido de Cloudflare es temporal y cambia al reiniciar. Detrás del túnel, el rate limiting ve la misma IP para todos los clientes. Si la PWA se abre por HTTPS, el navegador bloquea APIs `http://` (contenido mixto).
 - **Pruebas de backend:** usan la base configurada y comparten configuración global; deben ejecutarse sobre una base de pruebas.
 
 ---

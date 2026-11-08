@@ -18,6 +18,7 @@ import {
   type AppLocale,
 } from '../i18n';
 import { useSession } from '../lib/auth/session-context';
+import { getApiHost } from '../lib/api/server-config';
 import { formatMonthYear, getInitials } from '../lib/format';
 
 export function ProfilePage() {
@@ -185,6 +186,13 @@ export function ProfilePage() {
           </Card>
         </Link>
       ) : null}
+
+      <Link
+        to="/servidor"
+        className="block text-center text-sm font-medium text-primary-700 underline-offset-4 hover:underline"
+      >
+        {t('server.linkLabel', { host: getApiHost() })}
+      </Link>
 
       <Button
         variant="danger"

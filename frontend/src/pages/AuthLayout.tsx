@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
+import { getApiHost } from '../lib/api/server-config';
 
 export interface AuthLayoutProps {
   title: string;
@@ -34,6 +36,15 @@ export function AuthLayout({ title, subtitle, children }: AuthLayoutProps) {
             <div className="mt-5">{children}</div>
           </div>
         </main>
+
+        <footer className="mt-5 text-center">
+          <Link
+            to="/servidor"
+            className="text-caption font-medium text-white/65 underline-offset-4 hover:text-white hover:underline"
+          >
+            {t('server.linkLabel', { host: getApiHost() })}
+          </Link>
+        </footer>
       </div>
     </div>
   );

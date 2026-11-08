@@ -1,3 +1,4 @@
+import os from 'node:os';
 import { createApp } from './app.js';
 import { closePool } from './config/db.js';
 import { env } from './config/env.js';
@@ -5,11 +6,33 @@ import { logger } from './config/logger.js';
 
 const app = createApp();
 
-const server = app.listen(env.PORT, () => {
+function getLanAddresses(): string[] {
+  const addresses: string[] = [];
+
+  for (const entries of Object.values(os.networkInterfaces())) {
+    for (const entry of entries ?? []) {
+      if (entry.family === 'IPv4' && !entry.internal) {
+        addresses.push(entry.address);
+      }
+    }
+  }
+
+  return addresses;
+}
+
+const server = app.listen(env.PORT, env.HOST, () => {
   logger.info(
-    { port: env.PORT, env: env.NODE_ENV },
-    `FutLink API escuchando en http://localhost:${env.PORT}`,
+    { host: env.HOST, port: env.PORT, env: env.NODE_ENV },
+    `FutLink API escuchando en el puerto ${env.PORT}`,
   );
+
+  if (env.SERVE_WEB) {
+    logger.info('La PWA compilada se sirve desde la misma API');
+  }
+
+  for (const address of getLanAddresses()) {
+    logger.info(`Acceso desde la red local: http://${address}:${env.PORT}`);
+  }
 });
 
 server.on('error', (err) => {

@@ -15,6 +15,7 @@ import { RecoverPage } from '../pages/RecoverPage';
 import { RegisterPage } from '../pages/RegisterPage';
 import { RequestsPage } from '../pages/RequestsPage';
 import { SearchPage } from '../pages/SearchPage';
+import { ServerSettingsPage } from '../pages/ServerSettingsPage';
 import {
   GuestOnly,
   RequireAuth,
@@ -30,6 +31,8 @@ export function AppRoutes() {
         <Route path="/registro" element={<RegisterPage />} />
         <Route path="/recuperar" element={<RecoverPage />} />
       </Route>
+
+      <Route path="/servidor" element={<ServerSettingsPage />} />
 
       <Route element={<RequireAuth />}>
         <Route path="/perfil/completar" element={<CompleteProfilePage />} />

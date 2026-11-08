@@ -11,6 +11,8 @@ dotenv.config({
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().max(65535).default(3000),
+  // 0.0.0.0 permite que el celular alcance la API desde la misma red WiFi.
+  HOST: z.string().min(1).default('0.0.0.0'),
   DB_HOST: z.string().min(1),
   DB_PORT: z.coerce.number().int().positive().max(65535).default(5432),
   DB_USER: z.string().min(1),
@@ -32,6 +34,11 @@ const envSchema = z.object({
     .string()
     .regex(/^\d+(?:kb|mb)$/i, 'Usa un formato como 256kb o 1mb')
     .default('1mb'),
+  // Sirve la PWA compilada (frontend/dist) desde la misma API y puerto.
+  SERVE_WEB: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
 
   // Autenticación (Fase 3)
   JWT_ACCESS_SECRET: z

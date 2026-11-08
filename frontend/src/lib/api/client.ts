@@ -1,11 +1,8 @@
 import { clearSession, readSession, writeSession } from '../auth/storage';
+import { BUILD_API_URL, getApiBaseUrl } from './server-config';
 import type { AuthResult } from './types';
 
-const DEFAULT_API_URL = 'http://localhost:3000/api';
-
-export const API_BASE_URL = (
-  import.meta.env.VITE_API_URL ?? DEFAULT_API_URL
-).replace(/\/+$/, '');
+export const API_BASE_URL = BUILD_API_URL;
 
 export const SESSION_EXPIRED_EVENT = 'futlink:session-expired';
 
@@ -109,7 +106,7 @@ async function perform<T>(path: string, options: RequestOptions): Promise<T> {
 
   let response: Response;
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, init);
+    response = await fetch(`${getApiBaseUrl()}${path}`, init);
   } catch (cause) {
     if (cause instanceof DOMException && cause.name === 'AbortError') {
       throw cause;
@@ -149,7 +146,7 @@ async function performRefresh(): Promise<RefreshOutcome> {
 
   let response: Response;
   try {
-    response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+    response = await fetch(`${getApiBaseUrl()}/auth/refresh`, {
       method: 'POST',
       headers: {
         Accept: 'application/json',
