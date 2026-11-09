@@ -754,10 +754,21 @@ const esCO = {
     linkLabel: 'Servidor: {{host}}',
     current: 'Servidor actual',
     builtIn: 'Predeterminado',
+    notConnected: 'Aún sin configurar',
+    noDefault: 'Escanea el QR del computador servidor',
     urlLabel: 'URL de la API',
-    urlPlaceholder: 'https://tu-servidor.com/api',
+    urlPlaceholder: 'http://192.168.1.10:3000/api',
     urlHelp:
-      'Si omites la ruta se usa /api. Al cambiar de servidor se cierra la sesión.',
+      'En la misma Wi-Fi usa la URL local del computador (puerto 3000). En redes públicas usa HTTPS. Al cambiar de servidor se cierra la sesión.',
+    scanAction: 'Escanear QR del servidor',
+    scanning: 'Abriendo cámara…',
+    scanInstructions: 'Apunta al código QR mostrado por el servidor FutLink',
+    scanSuccess: 'Dirección leída. Prueba la conexión para continuar.',
+    scanFailed: 'No se pudo leer el código QR. Revisa el permiso de cámara.',
+    invalidQr: 'El QR no contiene una dirección de servidor FutLink válida.',
+    qrTitle: 'Conectar la app móvil',
+    qrDescription:
+      'Escanea este código desde FutLink en tu teléfono. Abre esta página usando la IP local del computador, no localhost.',
     testAction: 'Probar conexión',
     testing: 'Probando…',
     testOk: 'Conexión correcta. La base de datos responde.',
@@ -767,7 +778,7 @@ const esCO = {
     invalidUrl:
       'Escribe una URL válida, por ejemplo https://mi-servidor.com/api.',
     mixedContent:
-      'Una app abierta por HTTPS no puede conectarse a una API HTTP. Usa una URL https:// o abre la app por HTTP en la red local.',
+      'Una app abierta por HTTPS no puede conectarse a una API HTTP. Usa HTTPS o abre el servidor por su IP local en la misma Wi-Fi.',
     saveAction: 'Guardar servidor',
     resetAction: 'Restaurar predeterminado',
     saved: 'Servidor actualizado. Inicia sesión de nuevo.',

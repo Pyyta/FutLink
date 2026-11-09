@@ -2,6 +2,8 @@ import { randomBytes } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import nodemailer from 'nodemailer';
+import { env } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 
 export interface MailMessage {
@@ -49,7 +51,30 @@ export class MemoryMailService implements MailService {
   }
 }
 
-let current: MailService = new OutboxMailService();
+export class SmtpMailService implements MailService {
+  private readonly transporter = nodemailer.createTransport({
+    host: env.SMTP_HOST,
+    port: env.SMTP_PORT,
+    secure: env.SMTP_SECURE,
+    ...(env.SMTP_USER && env.SMTP_PASSWORD
+      ? { auth: { user: env.SMTP_USER, pass: env.SMTP_PASSWORD } }
+      : {}),
+  });
+
+  async send(message: MailMessage): Promise<void> {
+    await this.transporter.sendMail({
+      from: env.SMTP_FROM,
+      to: message.to,
+      subject: message.subject,
+      text: message.text,
+    });
+  }
+}
+
+let current: MailService =
+  env.NODE_ENV === 'production'
+    ? new SmtpMailService()
+    : new OutboxMailService();
 
 export function getMailService(): MailService {
   return current;

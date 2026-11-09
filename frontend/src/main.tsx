@@ -1,5 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { Capacitor } from '@capacitor/core';
 import { registerSW } from 'virtual:pwa-register';
 import { App } from './app/App';
 import './styles/index.css';
@@ -15,4 +16,8 @@ createRoot(rootElement).render(
   </StrictMode>,
 );
 
-registerSW({ immediate: true });
+// The native shell already ships its web assets locally. A second service
+// worker adds no value there and can interfere with native plugin injection.
+if (!Capacitor.isNativePlatform()) {
+  registerSW({ immediate: true });
+}

@@ -1,4 +1,4 @@
-import { Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { AdminPage } from '../pages/AdminPage';
 import { CompleteProfilePage } from '../pages/CompleteProfilePage';
@@ -16,6 +16,7 @@ import { RegisterPage } from '../pages/RegisterPage';
 import { RequestsPage } from '../pages/RequestsPage';
 import { SearchPage } from '../pages/SearchPage';
 import { ServerSettingsPage } from '../pages/ServerSettingsPage';
+import { isApiServerConfigured } from '../lib/api/server-config';
 import {
   GuestOnly,
   RequireAuth,
@@ -24,6 +25,15 @@ import {
 } from './guards';
 
 export function AppRoutes() {
+  if (!isApiServerConfigured()) {
+    return (
+      <Routes>
+        <Route path="/servidor" element={<ServerSettingsPage />} />
+        <Route path="*" element={<Navigate to="/servidor" replace />} />
+      </Routes>
+    );
+  }
+
   return (
     <Routes>
       <Route element={<GuestOnly />}>

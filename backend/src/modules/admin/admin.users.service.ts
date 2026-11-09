@@ -188,7 +188,7 @@ export async function updateAdminUser(
   adminId: number,
 ): Promise<AdminUserDetailDto> {
   const current = await repository.findAdminUserById(id);
-  if (!current) {
+  if (!current || current.state === 'deleted') {
     throw new AppError(404, 'USER_NOT_FOUND', 'Usuario no encontrado');
   }
 
@@ -246,9 +246,23 @@ export async function updateAdminUser(
 
   try {
     await withTransaction(async (client) => {
+      await repository.lockAdminRoster(client);
       const locked = await repository.findAdminUserForUpdate(id, client);
-      if (!locked) {
+      if (!locked || locked.state === 'deleted') {
         throw new AppError(404, 'USER_NOT_FOUND', 'Usuario no encontrado');
+      }
+
+      const removesActiveAdmin =
+        locked.role === 'admin' &&
+        locked.state === 'active' &&
+        ((fields.role !== undefined && fields.role !== 'admin') ||
+          fields.state === 'suspended');
+      if (removesActiveAdmin && (await repository.countActiveAdmins(client)) <= 1) {
+        throw new AppError(
+          409,
+          'LAST_ACTIVE_ADMIN',
+          'No puedes quitar o suspender al último administrador activo',
+        );
       }
 
       await repository.updateAdminUser(id, fields, client);
@@ -311,9 +325,22 @@ export async function deleteAdminUser(
   );
 
   const result = await withTransaction(async (client) => {
+    await repository.lockAdminRoster(client);
     const locked = await repository.findAdminUserForUpdate(id, client);
     if (!locked || locked.state === 'deleted') {
       throw new AppError(404, 'USER_NOT_FOUND', 'Usuario no encontrado');
+    }
+
+    if (
+      locked.role === 'admin' &&
+      locked.state === 'active' &&
+      (await repository.countActiveAdmins(client)) <= 1
+    ) {
+      throw new AppError(
+        409,
+        'LAST_ACTIVE_ADMIN',
+        'No puedes eliminar al último administrador activo',
+      );
     }
 
     const notified = new Set<number>();

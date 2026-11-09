@@ -1,149 +1,137 @@
-# Uso desde Android e iOS
+# App móvil y servidor en la red local
 
-FutLink se entrega como **PWA instalable**: no requiere APK ni `.ipa` y funciona en Android e iOS desde el navegador.
+FutLink entrega la misma interfaz web como PWA y como app nativa para Android e iOS. La app nativa se instala desde un APK/IPA y guarda la dirección del servidor en el teléfono. La base de datos permanece en el computador servidor: el móvil nunca se conecta a PostgreSQL.
 
-> El teléfono **no se conecta a PostgreSQL**. La app habla con la API (Node/Express), y la API habla con la base de datos. Por eso "servidor" significa la API + PostgreSQL corriendo en tu PC o en otra máquina.
-
+```text
+App FutLink (iOS/Android) ── Wi-Fi, HTTP local o HTTPS ──► API Node.js :3000 ──► PostgreSQL/PostGIS localhost:5432
 ```
-Celular  ──HTTPS──►  API (tu PC)  ──►  PostgreSQL + PostGIS (tu PC)
-   PWA                 :3000                 :5432
-```
+
+La API escucha en `0.0.0.0:3000` para aceptar conexiones de la red local. PostgreSQL usa `DB_HOST=localhost`; no abras ni reenvíes el puerto `5432`.
 
 ## Requisitos
 
-- Node.js 24 o superior y PostgreSQL con PostGIS ya configurados (ver README).
-- El celular y la PC en la misma red WiFi (para el modo local).
-- Para instalar la PWA hace falta **HTTPS**; el túnel del paso 3 lo proporciona.
+### Computador servidor
 
-## 1. Compilar y arrancar
+- Windows o Linux conectado a la misma red privada Wi-Fi que los teléfonos.
+- Node.js 24 o superior.
+- PostgreSQL con PostGIS, con la base `Futlink` creada y escuchando localmente.
+- Puerto TCP `3000` permitido en el firewall del computador para el perfil de red privada.
 
-Desde la raíz del repositorio, en PowerShell:
+### Para generar los ejecutables
+
+- Android: Android Studio y Android SDK. El escáner QR usa Android SDK 26 como mínimo (Android 8+).
+- iOS: macOS con Xcode 26 o superior. Capacitor 8 requiere macOS/Xcode para compilar y firmar iOS; desde Windows o Linux no se genera un `.ipa` instalable. [Requisitos de entorno de Capacitor](https://capacitorjs.com/docs/getting-started/environment-setup).
+
+## 1. Preparar el computador servidor (Windows o Linux)
+
+Configura `backend/.env`. Para PostgreSQL instalado en ese mismo computador, conserva la conexión local:
+
+```dotenv
+HOST=0.0.0.0
+PORT=3000
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=Futlink
+DB_USER=tu_usuario
+DB_PASSWORD=tu_clave
+SERVE_WEB=true
+```
+
+Completa también `JWT_ACCESS_SECRET`, `RESET_CODE_PEPPER` y, en producción, las variables `SMTP_*` para recuperación de contraseña. No configures `DB_HOST` con la IP Wi-Fi del computador: la API y PostgreSQL están en la misma máquina.
+
+Desde la raíz del repositorio:
 
 ```powershell
 npm install
+npm run db:migrate
+npm run db:seed
 npm run bundle
 npm start
 ```
 
-`npm run bundle` compila el backend y el frontend. `npm start` levanta la API y, además, sirve la PWA compilada en el mismo puerto (`http://localhost:3000`).
+En Linux, los mismos comandos funcionan desde Bash. Al arrancar, la API imprime las direcciones IPv4 de las interfaces de red. Usa la dirección de la interfaz Wi-Fi, por ejemplo `192.168.1.10`.
 
-En la consola verás algo así:
+### Permitir conexiones de teléfonos
 
-```
-FutLink API escuchando en el puerto 3000
-La PWA compilada se sirve desde la misma API
-Acceso desde la red local: http://192.168.1.10:3000
-```
-
-Verifica en la PC que `http://localhost:3000` abre la app y que `http://localhost:3000/api/health` responde JSON. Si no existe `frontend/dist`, el backend solo expone la API y avisa en el log.
-
-## 2. Opción A: red local (HTTP)
-
-Abre en el navegador del celular `http://<IP-de-tu-PC>:3000`, por ejemplo `http://192.168.1.10:3000`.
-
-- Funciona para probar la app, pero **no se puede instalar como PWA** ni usar el service worker: los navegadores exigen HTTPS (salvo `localhost`).
-- Windows puede bloquear el puerto. Abre PowerShell **como administrador** una vez:
+En Windows, abre PowerShell como administrador una sola vez:
 
 ```powershell
-New-NetFirewallRule -DisplayName "FutLink API" -Direction Inbound -Protocol TCP -LocalPort 3000 -Action Allow -Profile Private
+New-NetFirewallRule -DisplayName "FutLink API Wi-Fi" -Direction Inbound -Protocol TCP -LocalPort 3000 -Action Allow -Profile Private
 ```
 
-Si cambias de red, la IP puede cambiar: vuelve a revisarla con `ipconfig`.
+En Linux con UFW, limita el acceso al rango de tu red Wi-Fi. Ajusta el rango si tu router usa otra subred:
 
-## 3. Opción B: túnel HTTPS (recomendado para instalar la PWA)
+```bash
+sudo ufw allow from 192.168.1.0/24 to any port 3000 proto tcp
+```
 
-Instala Cloudflare Tunnel (una vez):
+No abras el puerto `5432` en el firewall. Si el Wi-Fi es una red de invitados o tiene “client/AP isolation”, los teléfonos no podrán llegar al computador; conecta ambos a la red privada normal. Para que la IP no cambie, reserva la dirección del computador en el router.
+
+Comprueba en el propio computador:
+
+- App web: `http://localhost:3000`
+- Salud API + conexión de base: `http://localhost:3000/api/health`
+- Prueba desde otro equipo de la red: `http://192.168.1.10:3000/api/health`
+
+La respuesta de salud debe informar que la API, la base de datos y PostGIS están disponibles.
+
+## 2. Generar e instalar Android
+
+En el computador de desarrollo con Android Studio instalado:
 
 ```powershell
-winget install --id Cloudflare.cloudflared -e
+npm install
+npm run mobile:sync
+npx cap open android
 ```
 
-Con `npm start` corriendo en otra terminal, crea el túnel:
+En Android Studio, conecta un teléfono por USB o selecciona un emulador y pulsa **Run** para probar. Para crear un APK de instalación, selecciona **Build → Build Bundle(s) / APK(s) → Build APK(s)**. Android Studio muestra dónde guardó el APK; el artefacto de depuración suele quedar en `android/app/build/outputs/apk/debug/app-debug.apk`.
 
-```powershell
-cloudflared tunnel --url http://localhost:3000
+Para distribuir a usuarios, crea un APK/AAB de release firmado desde **Build → Generate Signed Bundle / APK**. No compartas un APK de debug como distribución de producción.
+
+## 3. Generar e instalar iOS
+
+En un Mac con Xcode 26 o superior:
+
+```bash
+npm install
+npm run mobile:sync
+npx cap open ios
 ```
 
-Cloudflared imprime una URL pública temporal, por ejemplo:
+En Xcode, selecciona el equipo de destino y configura el equipo de firma. Para probar en un iPhone, pulsa **Run**. Para distribuir, crea un archive firmado con la cuenta y el perfil de aprovisionamiento correspondientes. La firma, instalación fuera del App Store y distribución requieren la configuración de Apple correspondiente.
 
-```
-https://palabras-aleatorias.trycloudflare.com
-```
+## 4. Conectar el móvil al servidor por QR
 
-Abre esa URL en el celular. La PWA y la API comparten origen, así que no hay que configurar CORS ni la URL de la API.
+1. Verifica que el teléfono y el computador servidor estén en la misma Wi-Fi privada.
+2. En el computador, abre la URL LAN que imprimió FutLink, por ejemplo `http://192.168.1.10:3000/servidor`. No uses `localhost` en esta página.
+3. La pantalla **Servidor** muestra un QR con la dirección de la API del computador.
+4. Abre FutLink en el teléfono. En el primer inicio se abre la pantalla **Servidor**. Pulsa **Escanear QR del servidor** y apunta al QR del computador.
+5. Pulsa **Probar conexión** y luego **Guardar servidor**. Inicia sesión.
 
-### Instalar en Android (Chrome)
+Si prefieres, escribe la URL manualmente: `http://192.168.1.10:3000/api`. Cambia `192.168.1.10` por la IP Wi-Fi real del servidor.
 
-1. Abre la URL del túnel.
-2. Menú ⋮ → **Instalar aplicación** (o **Agregar a pantalla principal**).
-3. Queda como app independiente, con su icono y sin barra del navegador.
+La app comprueba `/api/health` antes de guardar y verifica que la base responda. En iOS aparecerá una solicitud del sistema para permitir el acceso a la red local y, al escanear, a la cámara. Autoriza ambas funciones para completar la conexión.
 
-### Instalar en iOS (Safari)
+La app permite HTTP sin cifrar solo hacia direcciones privadas/locales. Usa esta opción únicamente en una Wi-Fi de confianza: otros dispositivos con acceso a esa red podrían observar el tráfico. Para conectarte desde fuera de la red, usa HTTPS; no expongas PostgreSQL ni el puerto 5432 a Internet.
 
-1. Abre la URL del túnel **en Safari**.
-2. Botón **Compartir** → **Añadir a pantalla de inicio**.
-3. Confirma el nombre y abre FutLink desde el icono.
+## 5. PWA y acceso por HTTPS
 
-Limitaciones del túnel rápido:
+La PWA sigue disponible en el navegador. Para instalarla como acceso directo, abre el servidor mediante HTTPS. En una demostración se puede usar un túnel, pero su URL temporal cambia y depende del servicio de túnel. Para una instalación nativa en Android/iOS dentro de la misma Wi-Fi, usa el APK/IPA y la conexión LAN por QR descrita arriba.
 
-- La URL cambia cada vez que reinicias `cloudflared`.
-- No es un servicio con disponibilidad garantizada; sirve para demostraciones y pruebas.
-- Cualquiera con la URL puede abrir la pantalla de login. Los datos siguen protegidos por autenticación y roles.
-- Para una URL fija haría falta un túnel con nombre y un dominio en Cloudflare (fuera del alcance del MVP).
+## 6. PostgreSQL en otro computador (opcional)
 
-## 4. Cambiar de servidor desde la app
+Solo cambia esto si PostgreSQL no está junto a la API. Configura PostgreSQL para aceptar conexiones desde la subred privada, permite ese origen en `pg_hba.conf` y establece `DB_HOST` con la IP del equipo de base. Mantén el puerto 5432 restringido a esa LAN y no lo reenvíes al router. El caso recomendado y más simple es API y PostgreSQL en el mismo computador, con `DB_HOST=localhost`.
 
-La app resuelve la API así:
+## Solución de problemas
 
-1. Si guardaste una URL manual, usa esa.
-2. Si corre compilada y servida por el backend, usa el mismo origen (`/api`). Esto cubre tanto la IP local como el túnel.
-3. En desarrollo usa `VITE_API_URL`.
-
-Para apuntar la app a **otra** máquina o a otro túnel:
-
-1. Entra a **Servidor** (enlace al pie de las pantallas de acceso o en tu perfil), o abre `/servidor`.
-2. Escribe la URL, por ejemplo `https://mi-servidor.com/api`. Si omites la ruta se usa `/api`.
-3. Pulsa **Probar conexión**: consulta `/health` y confirma que la base de datos responde.
-4. Pulsa **Guardar servidor**. Se cierra la sesión actual porque los tokens pertenecen al servidor anterior.
-
-La elección se guarda en `localStorage['futlink.api-url']` del dispositivo. **Restaurar predeterminado** la borra.
-
-Si la API vive en otro origen distinto al de la PWA, agrega ese origen a `CORS_ORIGIN` en `backend/.env` y reinicia la API.
-
-## 5. Usar otro computador como servidor
-
-1. Instala Node.js, PostgreSQL y PostGIS en esa máquina.
-2. Copia el repositorio y crea `backend/.env` con sus propios `DB_*`, `JWT_ACCESS_SECRET` y `RESET_CODE_PEPPER`.
-3. Ejecuta `npm install`, `npm run db:migrate`, `npm run db:seed` y `npm run bundle`.
-4. Arranca con `npm start` y comprueba `/api/health`.
-5. Desde el celular, usa la IP o el túnel de ese computador y configura la URL en **Servidor** si es distinta a la de la PWA.
-
-Si compartes la misma base de datos entre máquinas, usa los **mismos** secretos JWT para que las sesiones emitidas por una API sean válidas en la otra.
-
-## 6. PostgreSQL en una máquina distinta a la API
-
-Solo si la base de datos no vive junto a la API. En el servidor de PostgreSQL:
-
-1. En `postgresql.conf`, define `listen_addresses = '*'`.
-2. En `pg_hba.conf`, permite tu red local (ejemplo para `192.168.1.0/24`):
-
-```
-host    all    all    192.168.1.0/24    scram-sha-256
-```
-
-3. Reinicia el servicio de PostgreSQL.
-4. En `backend/.env` de la API, apunta `DB_HOST` a la IP de esa máquina.
-
-**No expongas el puerto 5432 a Internet ni lo reenvíes en el router.** Para acceso remoto usa VPN o el túnel, nunca PostgreSQL abierto.
-
-## 7. Solución de problemas
-
-| Síntoma | Causa probable | Solución |
-| --- | --- | --- |
-| El celular no abre la app | Firewall o IP incorrecta | Revisa `ipconfig`, abre el puerto 3000 y usa la misma WiFi |
-| "No se pudo conectar" en la app | URL de API incorrecta o túnel cerrado | Usa **Servidor → Probar conexión** y revisa la terminal de `cloudflared` |
-| No aparece "Instalar aplicación" | La página se abrió por HTTP | Usa la URL HTTPS del túnel |
-| Error de CORS | PWA y API en orígenes distintos | Agrega el origen de la PWA a `CORS_ORIGIN` |
-| No conecta con una URL `http://` | La app está abierta por HTTPS | El navegador bloquea contenido mixto: usa una API `https://` o abre la app por HTTP en la red local |
-| `SERVE_WEB` avisa que falta `frontend/dist` | No compilaste el frontend | Ejecuta `npm run build:web` |
-| La app muestra una versión vieja | Service worker con caché | Cierra y reabre la app; si persiste, borra los datos del sitio |
+| Síntoma | Comprobación o solución |
+| --- | --- |
+| El móvil no abre la IP | Usa la IPv4 de Wi-Fi del servidor, confirma que los equipos no están en una red de invitados y permite TCP 3000 en firewall privado. |
+| `/api/health` no responde | Comprueba `npm start`, `HOST=0.0.0.0`, el firewall y que el puerto 3000 no esté ocupado. |
+| La API abre pero indica que la base está caída | Revisa PostgreSQL, PostGIS, `DB_HOST=localhost`, puerto, base, usuario y contraseña en `backend/.env`. |
+| El lector QR no abre cámara | Autoriza cámara para FutLink en Ajustes del teléfono; Android requiere SDK mínimo 26 para el plugin. |
+| iOS no puede conectar a la LAN | Acepta el permiso de red local, asegúrate de usar una IP privada y vuelve a probar. |
+| Después de cambiar el servidor no conecta | Abre **Servidor**, escanea el QR actualizado y prueba la conexión. Una IP DHCP puede cambiar; reserva la IP en el router. |
+| “No seguro” o contenido HTTP bloqueado en un navegador | Es normal en una PWA servida por HTTP. Usa el ejecutable nativo para LAN o sirve la PWA bajo HTTPS. |
+| Se necesita otro puerto | Cambia `PORT` en `backend/.env`, reinicia la API y actualiza la regla del firewall y la URL/QR. |

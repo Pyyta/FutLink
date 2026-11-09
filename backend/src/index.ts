@@ -6,13 +6,30 @@ import { logger } from './config/logger.js';
 
 const app = createApp();
 
-function getLanAddresses(): string[] {
-  const addresses: string[] = [];
+function isPrivateIPv4(address: string): boolean {
+  const octets = address.split('.').map(Number);
+  if (octets.length !== 4 || octets.some((part) => !Number.isInteger(part))) {
+    return false;
+  }
+  const [first, second] = octets;
+  return (
+    first === 10 ||
+    (first === 192 && second === 168) ||
+    (first === 172 && second !== undefined && second >= 16 && second <= 31)
+  );
+}
 
-  for (const entries of Object.values(os.networkInterfaces())) {
+function getLanAddresses(): Array<{ interfaceName: string; address: string }> {
+  const addresses: Array<{ interfaceName: string; address: string }> = [];
+
+  for (const [interfaceName, entries] of Object.entries(os.networkInterfaces())) {
     for (const entry of entries ?? []) {
-      if (entry.family === 'IPv4' && !entry.internal) {
-        addresses.push(entry.address);
+      if (
+        entry.family === 'IPv4' &&
+        !entry.internal &&
+        isPrivateIPv4(entry.address)
+      ) {
+        addresses.push({ interfaceName, address: entry.address });
       }
     }
   }
@@ -30,8 +47,11 @@ const server = app.listen(env.PORT, env.HOST, () => {
     logger.info('La PWA compilada se sirve desde la misma API');
   }
 
-  for (const address of getLanAddresses()) {
-    logger.info(`Acceso desde la red local: http://${address}:${env.PORT}`);
+  for (const { interfaceName, address } of getLanAddresses()) {
+    logger.info(
+      { interfaceName, address },
+      `Acceso LAN (${interfaceName}): http://${address}:${env.PORT}`,
+    );
   }
 });
 

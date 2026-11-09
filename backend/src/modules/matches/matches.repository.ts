@@ -47,6 +47,7 @@ export interface MatchLockRow {
   creator_id: number;
   state: MatchState;
   moderation_state: ModerationState;
+  match_date: Date;
 }
 
 export interface CancelledRequestRow {
@@ -277,7 +278,7 @@ export function lockMatch(
 ): Promise<MatchLockRow | null> {
   return client
     .query<MatchLockRow>(
-      `SELECT creator_id, state, moderation_state
+      `SELECT creator_id, state, moderation_state, match_date
        FROM matchs
        WHERE id = $1
        FOR UPDATE`,

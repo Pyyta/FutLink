@@ -2,7 +2,7 @@
 
 **Fútbol amateur en Bogotá, a un toque.**
 
-FutLink es una PWA mobile-first en español (es-CO) para organizar y unirse a partidos de fútbol amateur en Bogotá D.C. Los jugadores completan su perfil, publican partidos, buscan jugadores cercanos y gestionan solicitudes de cupo o de vinculación. Un panel administrativo permite moderar usuarios y contenidos, generar reportes y ajustar la configuración global de la plataforma.
+FutLink es una aplicación mobile-first en español (es-CO) para organizar y unirse a partidos de fútbol amateur en Bogotá D.C. Incluye una PWA y ejecutables nativos para Android e iOS mediante Capacitor. Los jugadores completan su perfil, publican partidos, buscan jugadores cercanos y gestionan solicitudes de cupo o de vinculación. Un panel administrativo permite moderar usuarios y contenidos, generar reportes y ajustar la configuración global de la plataforma.
 
 El proyecto cubre los requisitos funcionales **RF-01 a RF-14** del documento de ingeniería y se desarrolló en 16 fases sobre un monorepo con backend y frontend separados.
 
@@ -11,7 +11,7 @@ El proyecto cubre los requisitos funcionales **RF-01 a RF-14** del documento de 
 ## Estado del proyecto
 
 - **Backend:** API REST completa con autenticación, perfiles, partidos, solicitudes, notificaciones, calificaciones y administración.
-- **Frontend:** PWA React con las pantallas de producto y el panel de administración en cuatro pestañas.
+- **Frontend móvil:** React + Capacitor, PWA y proyectos nativos Android/iOS. El primer inicio nativo configura el servidor mediante QR.
 - **Base de datos:** migrada hasta `0010_administracion`; seeds idempotentes de posiciones y localidades.
 - **Calidad:** 180 pruebas de backend, 106 de frontend, typecheck estricto y build de producción en verde al cierre de la Fase 16.
 - **Migraciones:** cambios de esquema solo mediante archivos `up/down` numerados en `database/migrations/`.
@@ -42,6 +42,7 @@ Además:
 - Interfaz en **es-CO** con overrides parciales para es-AR y es-MX.
 - Diseño mobile-first con marco de 430 px, navegación inferior y componentes accesibles.
 - PWA instalable con manifest, iconos y precache del shell.
+- App nativa con conexión LAN a una API alojada en Windows o Linux; la app valida la URL, escanea QR y comprueba PostgreSQL mediante `/api/health`.
 - Panel administrativo accesible desde `/admin` solo para usuarios con rol `admin`.
 
 ---
@@ -72,6 +73,7 @@ Además:
 - i18next / react-i18next
 - Tailwind CSS 3
 - `vite-plugin-pwa` + Workbox
+- Capacitor 8 + escáner QR nativo
 - Vitest + Testing Library + jsdom
 
 ### Base de datos
@@ -115,6 +117,9 @@ futlink/
 │  │  └─ test/            # render con providers y fixtures
 │  ├─ vite.config.ts
 │  └─ package.json
+├─ android/              # Proyecto Android Studio / APK
+├─ ios/                  # Proyecto Xcode / IPA
+├─ capacitor.config.ts   # Configuración Capacitor compartida
 ├─ package.json           # workspaces y scripts raíz
 └─ tsconfig.base.json
 ```
@@ -173,6 +178,8 @@ Copy-Item frontend/.env.example frontend/.env
 ```
 
 Edita `backend/.env` con las credenciales locales. No versiones `.env` ni compartas sus secretos.
+
+En producción, configura también `SMTP_HOST`, `SMTP_PORT` y `SMTP_FROM` para entregar los códigos de recuperación. Si el servidor SMTP requiere autenticación, configura `SMTP_USER` y `SMTP_PASSWORD` juntos. En desarrollo los mensajes quedan en `backend/.mail-outbox/`.
 
 Genera secretos aleatorios para `JWT_ACCESS_SECRET` y `RESET_CODE_PEPPER`:
 
@@ -243,8 +250,13 @@ npm start
 - Frontend compilado en `frontend/dist/`. Con `SERVE_WEB=true` (predeterminado) el backend sirve la PWA en el mismo origen, en `http://localhost:3000`.
 - `VITE_API_URL` se incorpora en tiempo de build, pero en producción la app usa por defecto el mismo origen (`/api`). La URL se puede cambiar en el dispositivo desde `/servidor` sin recompilar.
 - Para publicar la PWA en otro dominio, sirve `frontend/dist` por separado, ajusta `VITE_API_URL` antes de compilar y agrega el origen del frontend a `CORS_ORIGIN`.
+- En `NODE_ENV=production`, el backend exige la configuración SMTP anterior y termina el arranque si falta, para no aceptar solicitudes de recuperación que no puedan entregarse.
 
 Para instalar la app en Android e iOS y conectarla a tu PC o a otra máquina, sigue [docs/movil-y-servidor.md](docs/movil-y-servidor.md).
+
+### 8. Ejecutables móviles
+
+En Android Studio se genera el APK con `npm run mobile:sync` y luego **Build → Build APK(s)**. Para iOS, ejecuta `npm run mobile:sync` en macOS y abre el proyecto con `npx cap open ios`; Xcode es necesario para compilar y firmar el `.ipa`. El teléfono se conecta al computador servidor por la IP privada Wi-Fi y PostgreSQL queda en `localhost` junto a la API. La guía incluye firewall, permisos nativos, instalación y conexión por QR.
 
 ---
 
@@ -259,6 +271,9 @@ Todos se ejecutan desde la raíz del monorepo.
 | `npm run build` | Compila el backend con TypeScript. |
 | `npm run build:web` | Typecheck y build de producción del frontend. |
 | `npm run bundle` | Compila backend y frontend en un solo paso. |
+| `npm run mobile:sync` | Compila el frontend y sincroniza los assets/plugins a Android e iOS. |
+| `npm run mobile:android` | Sincroniza y abre el proyecto Android Studio. |
+| `npm run mobile:ios` | Sincroniza y abre el proyecto Xcode (requiere macOS). |
 | `npm start` | Ejecuta el backend compilado. |
 | `npm test` | Pruebas de backend con Vitest. |
 | `npm run test:web` | Pruebas de frontend con Vitest. |
@@ -301,6 +316,12 @@ Todos se ejecutan desde la raíz del monorepo.
 | `AUTH_RATE_LIMIT_WINDOW_MINUTES` | No | Ventana de rate limit. Por defecto `15`. |
 | `AUTH_RATE_LIMIT_MAX` | No | Intentos de auth por ventana. Por defecto `20`. |
 | `PASSWORD_RESET_RATE_LIMIT_MAX` | No | Intentos de recuperación por ventana. Por defecto `5`. |
+| `SMTP_HOST` | Producción | Host del servidor SMTP para entregar códigos de recuperación. |
+| `SMTP_PORT` | Producción | Puerto SMTP. Usa `465` con `SMTP_SECURE=true` o normalmente `587` con `false`. |
+| `SMTP_SECURE` | No | TLS implícito SMTP. Por defecto `false`. |
+| `SMTP_USER` | No | Usuario de SMTP; debe configurarse junto con `SMTP_PASSWORD`. |
+| `SMTP_PASSWORD` | No | Contraseña SMTP. |
+| `SMTP_FROM` | Producción | Dirección de correo remitente verificada por el proveedor. |
 | `ADMIN_EMAIL` | Solo para `admin:create` | Correo del administrador a provisionar. |
 | `ADMIN_PASSWORD` | Solo para `admin:create` | Contraseña temporal entre 8 y 72 caracteres. |
 
@@ -475,7 +496,7 @@ Las pruebas de frontend usan Vitest, Testing Library y jsdom, con un helper `ren
 - Manifest en español con `display: standalone`, orientación vertical e iconos 192, 512 y maskable.
 - Workbox precachea el shell (HTML, JS, CSS, imágenes y fuentes) y **nunca cachea `/api/`**: las peticiones a la API usan `NetworkOnly`.
 - El service worker se genera en el build; en desarrollo está desactivado. `npm run preview -w frontend` sirve el build en la red local y redirige `/api` al backend.
-- Instalable en Android (Chrome) e iOS (Safari) cuando se sirve por HTTPS. Guía completa: [docs/movil-y-servidor.md](docs/movil-y-servidor.md).
+- La PWA se instala desde HTTPS; los ejecutables nativos se generan con Capacitor y conectan a la API de la misma Wi-Fi por QR o URL privada. Guía completa: [docs/movil-y-servidor.md](docs/movil-y-servidor.md).
 - Interfaz mobile-first con marco de 430 px, tarjetas claras, primario esmeralda y navegación inferior.
 - Referencia visual del prototipo: [Figma de FutLink](https://www.figma.com/design/ZTqUwCqTg6V8s6xGhbzCKa/Futlink?node-id=0-1&p=f) (solo lectura).
 

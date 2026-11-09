@@ -150,6 +150,20 @@ export function findAdminUserForUpdate(
   ).then((rows) => rows[0] ?? null);
 }
 
+export async function lockAdminRoster(client: PoolClient): Promise<void> {
+  // Serializa cambios que puedan dejar el sistema sin administradores activos.
+  await client.query('SELECT pg_advisory_xact_lock(7412051801)');
+}
+
+export async function countActiveAdmins(client: PoolClient): Promise<number> {
+  const result = await client.query<{ total: number }>(
+    `SELECT COUNT(*)::int AS total
+     FROM users
+     WHERE role = 'admin' AND state = 'active'`,
+  );
+  return result.rows[0]?.total ?? 0;
+}
+
 export function findEmailOwner(
   email: string,
   excludeId: number | null,

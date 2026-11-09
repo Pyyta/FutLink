@@ -139,6 +139,91 @@ type RefreshOutcome =
   | { status: 'unavailable'; httpStatus: number };
 
 let refreshPromise: Promise<RefreshOutcome> | null = null;
+const REFRESH_LOCK_TTL_MS = 10_000;
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function refreshWithObservedToken(
+  observedRefreshToken: string | null,
+): Promise<RefreshOutcome> {
+  const current = readSession();
+  if (!current) return { status: 'invalid' };
+  if (
+    observedRefreshToken !== null &&
+    current.refreshToken !== observedRefreshToken
+  ) {
+    return { status: 'refreshed' };
+  }
+  return performRefresh();
+}
+
+async function refreshWithStorageLock(
+  observedRefreshToken: string | null,
+): Promise<RefreshOutcome> {
+  if (typeof window === 'undefined') return { status: 'invalid' };
+
+  const key = `futlink.refresh-lock:${getApiBaseUrl()}`;
+  const owner = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const deadline = Date.now() + REFRESH_LOCK_TTL_MS + 2_000;
+
+  try {
+    while (Date.now() < deadline) {
+      const now = Date.now();
+      const raw = window.localStorage.getItem(key);
+      let expiresAt = 0;
+      if (raw) {
+        try {
+          const lease = JSON.parse(raw) as { expiresAt?: unknown };
+          if (typeof lease.expiresAt === 'number') expiresAt = lease.expiresAt;
+        } catch {
+          expiresAt = 0;
+        }
+      }
+
+      if (expiresAt <= now) {
+        window.localStorage.setItem(
+          key,
+          JSON.stringify({ owner, expiresAt: now + REFRESH_LOCK_TTL_MS }),
+        );
+        // Let simultaneous tabs contend before deciding who owns the lease.
+        await wait(50);
+        const claimed = window.localStorage.getItem(key);
+        if (claimed) {
+          try {
+            if ((JSON.parse(claimed) as { owner?: unknown }).owner === owner) {
+              try {
+                return await refreshWithObservedToken(observedRefreshToken);
+              } finally {
+                try {
+                  const latest = window.localStorage.getItem(key);
+                  if (
+                    latest &&
+                    (JSON.parse(latest) as { owner?: unknown }).owner === owner
+                  ) {
+                    window.localStorage.removeItem(key);
+                  }
+                } catch {
+                  // An expired lease will be reclaimed by another tab.
+                }
+              }
+            }
+          } catch {
+            // Malformed storage state is treated as an unclaimed lease.
+          }
+        }
+      }
+
+      await wait(75);
+    }
+  } catch {
+    // If storage is unavailable, keep the request usable with the normal refresh path.
+    return performRefresh();
+  }
+
+  return { status: 'unavailable', httpStatus: 0 };
+}
 
 async function performRefresh(): Promise<RefreshOutcome> {
   const current = readSession();
@@ -146,14 +231,21 @@ async function performRefresh(): Promise<RefreshOutcome> {
 
   let response: Response;
   try {
-    response = await fetch(`${getApiBaseUrl()}/auth/refresh`, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ refreshToken: current.refreshToken }),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8_000);
+    try {
+      response = await fetch(`${getApiBaseUrl()}/auth/refresh`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ refreshToken: current.refreshToken }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
   } catch {
     return { status: 'unavailable', httpStatus: 0 };
   }
@@ -190,10 +282,24 @@ async function performRefresh(): Promise<RefreshOutcome> {
   }
 }
 
-async function refreshSession(): Promise<RefreshOutcome> {
+async function refreshSession(
+  observedRefreshToken: string | null,
+): Promise<RefreshOutcome> {
   if (refreshPromise) return refreshPromise;
 
-  const attempt = performRefresh();
+  const attempt = (async (): Promise<RefreshOutcome> => {
+    // Share the rotating refresh token across tabs. The storage lease is also
+    // used where Web Locks is unavailable, such as HTTP on a local Wi-Fi network.
+    if (typeof navigator !== 'undefined' && navigator.locks) {
+      return navigator.locks.request(
+        `futlink-refresh:${getApiBaseUrl()}`,
+        { mode: 'exclusive' },
+        () => refreshWithObservedToken(observedRefreshToken),
+      );
+    }
+
+    return refreshWithStorageLock(observedRefreshToken);
+  })();
   refreshPromise = attempt;
   try {
     return await attempt;
@@ -212,6 +318,7 @@ export async function apiRequest<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
+  const observedRefreshToken = readSession()?.refreshToken ?? null;
   try {
     return await perform<T>(path, options);
   } catch (error) {
@@ -227,7 +334,7 @@ export async function apiRequest<T>(
       throw error;
     }
 
-    const outcome = await refreshSession();
+    const outcome = await refreshSession(observedRefreshToken);
 
     if (outcome.status === 'refreshed') {
       try {

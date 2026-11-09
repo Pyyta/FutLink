@@ -1,4 +1,6 @@
 import { useState, type FormEvent } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { QRCodeSVG } from 'qrcode.react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -8,6 +10,7 @@ import { useToast } from '../components/ui/Toast';
 import {
   BUILD_API_URL,
   getApiBaseUrl,
+  isApiServerConfigured,
   normalizeApiUrl,
   resetApiUrl,
   setApiUrl,
@@ -44,7 +47,41 @@ export function ServerSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<TestResult | null>(null);
   const [testing, setTesting] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const [saving, setSaving] = useState(false);
+  const requiresSetup = !isApiServerConfigured();
+
+  async function handleScanServer() {
+    setError(null);
+    setResult(null);
+    setScanning(true);
+
+    try {
+      const {
+        CapacitorBarcodeScanner,
+        CapacitorBarcodeScannerTypeHint,
+      } = await import('@capacitor/barcode-scanner');
+      const { ScanResult } = await CapacitorBarcodeScanner.scanBarcode({
+        hint: CapacitorBarcodeScannerTypeHint.QR_CODE,
+        scanInstructions: t('server.scanInstructions'),
+        scanButton: false,
+        cameraDirection: 1,
+      });
+      const normalized = normalizeApiUrl(ScanResult);
+
+      if (!normalized) {
+        setError(t('server.invalidQr'));
+        return;
+      }
+
+      setValue(normalized);
+      setResult({ tone: 'success', message: t('server.scanSuccess') });
+    } catch {
+      setResult({ tone: 'error', message: t('server.scanFailed') });
+    } finally {
+      setScanning(false);
+    }
+  }
 
   async function handleTest() {
     const normalized = normalizeApiUrl(value);
@@ -175,14 +212,49 @@ export function ServerSettingsPage() {
           spellCheck={false}
         />
 
+        {Capacitor.isNativePlatform() ? (
+          <Button
+            type="button"
+            variant="outline"
+            fullWidth
+            loading={scanning}
+            disabled={testing || saving}
+            onClick={() => void handleScanServer()}
+          >
+            {scanning ? t('server.scanning') : t('server.scanAction')}
+          </Button>
+        ) : null}
+
+        {!Capacitor.isNativePlatform() &&
+        !import.meta.env.DEV &&
+        !['localhost', '127.0.0.1'].includes(window.location.hostname) ? (
+          <section className="rounded-2xl border border-surface-200 bg-white p-4 text-center">
+            <h2 className="text-sm font-semibold text-ink">
+              {t('server.qrTitle')}
+            </h2>
+            <p className="mt-1 text-xs text-ink-soft">
+              {t('server.qrDescription')}
+            </p>
+            <div className="mt-3 inline-flex rounded-xl bg-white p-2">
+              <QRCodeSVG value={`${window.location.origin}/api`} size={180} />
+            </div>
+          </section>
+        ) : null}
+
         <dl className="space-y-1 text-sm">
           <div className="flex items-center justify-between gap-3">
             <dt className="text-ink-soft">{t('server.current')}</dt>
-            <dd className="truncate font-medium text-ink">{getApiBaseUrl()}</dd>
+            <dd className="truncate font-medium text-ink">
+              {getApiBaseUrl() || t('server.notConnected')}
+            </dd>
           </div>
           <div className="flex items-center justify-between gap-3">
             <dt className="text-ink-soft">{t('server.builtIn')}</dt>
-            <dd className="truncate font-medium text-ink">{BUILD_API_URL}</dd>
+            <dd className="truncate font-medium text-ink">
+              {Capacitor.isNativePlatform() && !import.meta.env.VITE_API_URL
+                ? t('server.noDefault')
+                : BUILD_API_URL}
+            </dd>
           </div>
         </dl>
 
@@ -213,25 +285,29 @@ export function ServerSettingsPage() {
           {t('server.saveAction')}
         </Button>
 
-        <Button
-          type="button"
-          variant="ghost"
-          fullWidth
-          disabled={saving || testing}
-          onClick={() => void handleReset()}
-        >
-          {t('server.resetAction')}
-        </Button>
+        {!requiresSetup ? (
+          <Button
+            type="button"
+            variant="ghost"
+            fullWidth
+            disabled={saving || testing}
+            onClick={() => void handleReset()}
+          >
+            {t('server.resetAction')}
+          </Button>
+        ) : null}
 
-        <button
-          type="button"
-          onClick={() => {
-            navigate('/');
-          }}
-          className="mx-auto block text-sm font-medium text-ink-soft underline-offset-4 hover:text-ink hover:underline"
-        >
-          {t('server.backAction')}
-        </button>
+        {!requiresSetup ? (
+          <button
+            type="button"
+            onClick={() => {
+              navigate('/');
+            }}
+            className="mx-auto block text-sm font-medium text-ink-soft underline-offset-4 hover:text-ink hover:underline"
+          >
+            {t('server.backAction')}
+          </button>
+        ) : null}
       </form>
     </AuthLayout>
   );

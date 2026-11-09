@@ -37,7 +37,21 @@ export function createApp(): express.Express {
       },
     }),
   );
-  app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
+  app.use(
+    cors({
+      // Capacitor serves the bundled app from these local WebView origins.
+      // They are required when the app connects to a different LAN origin.
+      origin: [
+        ...new Set([
+          ...env.CORS_ORIGIN,
+          'capacitor://localhost',
+          'https://localhost',
+          'http://localhost',
+        ]),
+      ],
+      credentials: true,
+    }),
+  );
   app.use(express.json({ limit: env.BODY_LIMIT }));
   app.use(express.urlencoded({ extended: true, limit: env.BODY_LIMIT }));
   app.use(pinoHttp({ logger, autoLogging: env.NODE_ENV !== 'test' }));

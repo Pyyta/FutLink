@@ -22,3 +22,12 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 .idea/
+
+# Native build output
+android/.gradle/
+android/local.properties
+android/**/build/
+android/app/src/main/assets/public/
+ios/DerivedData/
+ios/App/App/public/
+ios/App/App/capacitor.config.json

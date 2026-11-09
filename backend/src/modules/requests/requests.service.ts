@@ -297,6 +297,13 @@ export async function acceptRequest(
       if (vacancy.occupied) {
         throw new AppError(409, 'VACANCY_OCCUPIED', 'La plaza ya está ocupada');
       }
+      if (match.match_date.getTime() <= Date.now()) {
+        throw new AppError(
+          409,
+          'MATCH_ALREADY_STARTED',
+          'El partido ya comenzó o su fecha pasó',
+        );
+      }
       if (match.state !== 'available' || match.moderation_state !== 'visible') {
         throw new AppError(
           409,

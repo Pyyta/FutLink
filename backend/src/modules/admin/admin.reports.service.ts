@@ -35,7 +35,7 @@ function csvCell(value: unknown): string {
 
   let text = value instanceof Date ? value.toISOString() : String(value);
 
-  if (/^[=+\-@\t\r]/.test(text)) {
+  if (/^[\s\uFEFF]*[=+\-@]/u.test(text)) {
     text = `'${text}`;
   }
 

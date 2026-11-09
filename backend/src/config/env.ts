@@ -55,6 +55,12 @@ const envSchema = z.object({
   AUTH_RATE_LIMIT_WINDOW_MINUTES: z.coerce.number().int().min(1).max(1_440).default(15),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().min(3).max(1_000).default(20),
   PASSWORD_RESET_RATE_LIMIT_MAX: z.coerce.number().int().min(2).max(100).default(5),
+  SMTP_HOST: z.string().trim().min(1).optional(),
+  SMTP_PORT: z.coerce.number().int().positive().max(65535).optional(),
+  SMTP_SECURE: z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASSWORD: z.string().optional(),
+  SMTP_FROM: z.email().optional(),
 
   // Provisión inicial del administrador (RF-11..RF-14); opcionales.
   ADMIN_EMAIL: z.email().optional(),
@@ -78,3 +84,14 @@ if (!parsed.success) {
 }
 
 export const env = parsed.data;
+
+if (
+  env.NODE_ENV === 'production' &&
+  (!env.SMTP_HOST || !env.SMTP_PORT || !env.SMTP_FROM ||
+    (!!env.SMTP_USER !== !!env.SMTP_PASSWORD))
+) {
+  console.error(
+    '[FutLink] SMTP_HOST, SMTP_PORT y SMTP_FROM son obligatorios en producción; SMTP_USER y SMTP_PASSWORD deben configurarse juntos.',
+  );
+  process.exit(1);
+}
