@@ -418,6 +418,8 @@ Los ejemplos de peticiones están en `docs/*.http` y se pueden abrir con la exte
 
 ## Base de datos
 
+Para mover la base completa a Arch Linux, sigue la [guía de migración](docs/migrar-db-arch.md) y usa los scripts de respaldo/restauración incluidos.
+
 ### Tablas principales
 
 - `users`: cuentas, credenciales, rol, estado, perfil y fecha de registro.

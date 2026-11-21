@@ -31,3 +31,10 @@ android/app/src/main/assets/public/
 ios/DerivedData/
 ios/App/App/public/
 ios/App/App/capacitor.config.json
+
+# Copias PostgreSQL: incluyen datos personales y credenciales de usuarios
+db-backups/
+*.dump
+*.dump.partial
+*.dump.list.txt
+*.dump.sha256
