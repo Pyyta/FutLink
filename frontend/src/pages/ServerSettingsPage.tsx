@@ -30,6 +30,9 @@ interface HealthPayload {
 
 function isBlockedMixedContent(url: string): boolean {
   return (
+    // Capacitor's bundled WebView uses a local HTTPS origin; it may still
+    // call private-LAN HTTP APIs, which normalizeApiUrl validates separately.
+    !Capacitor.isNativePlatform() &&
     typeof window !== 'undefined' &&
     window.location.protocol === 'https:' &&
     url.startsWith('http://')

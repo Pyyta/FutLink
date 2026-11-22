@@ -115,10 +115,11 @@ Al terminar, comprueba que aparezcan la versión PostGIS, los conteos de usuario
 ## 5. Conectar los teléfonos y cerrar la migración
 
 1. Conecta teléfono y Arch a la misma Wi-Fi privada.
-2. Abre FutLink desde la dirección LAN del Arch, por ejemplo `http://192.168.1.20:3000/servidor`, y escanea el QR desde el ejecutable móvil.
-3. Prueba inicio de sesión, lista de partidos, perfil, ubicación y creación de un partido.
-4. Mantén PostgreSQL y la API antiguos detenidos, pero **conserva el origen y el `.dump` sin cambios** hasta terminar la validación y tener otro respaldo del Arch.
-5. Una vez aceptado el cambio, define una copia periódica de la base Arch y cifra/limita el acceso a los respaldos.
+2. En el navegador del computador abre la pantalla del servidor, por ejemplo `http://192.168.1.20:3000/servidor`; ahí aparece el QR. La ruta `/api/health` solo muestra el JSON de salud y no incluye el QR.
+3. En el ejecutable móvil, escanea el QR. Para escribirlo manualmente, usa `http://192.168.1.20:3000/api`.
+4. Prueba inicio de sesión, lista de partidos, perfil, ubicación y creación de un partido.
+5. Mantén PostgreSQL y la API antiguos detenidos, pero **conserva el origen y el `.dump` sin cambios** hasta terminar la validación y tener otro respaldo del Arch.
+6. Una vez aceptado el cambio, define una copia periódica de la base Arch y cifra/limita el acceso a los respaldos.
 
 Si una interrupción eléctrica o cierre forzado corta el restaurador antes de que pueda ejecutar su limpieza, revoca a mano el privilegio temporal después de reiniciar PostgreSQL:
 
