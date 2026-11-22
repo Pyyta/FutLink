@@ -62,7 +62,7 @@ Desde la raíz del repositorio FutLink en Arch (o copia `scripts/restore-db-arch
 bash scripts/restore-db-arch.sh ~/FutLink-db-migration/Futlink-AAAAmmdd-HHMMSS.dump Futlink futlink_app
 ```
 
-El restaurador valida el archivo y exige que no exista ya la base `Futlink` ni el rol `futlink_app`. **No borra ni reemplaza bases existentes.** Crea un rol con privilegio temporal de superusuario porque la restauración completa necesita crear PostGIS, carga el respaldo en una transacción y lo degrada a `NOSUPERUSER` al terminar. Te pedirá dos veces una contraseña nueva para `futlink_app`; guárdala para el paso siguiente. Si una restauración falla, el script elimina solo la base vacía/parcial que él mismo creó y quita el privilegio temporal.
+El restaurador valida el archivo y exige que no exista ya la base `Futlink` ni el rol `futlink_app`. **No borra ni reemplaza bases existentes.** Crea un rol con privilegio temporal de superusuario porque la restauración completa necesita crear PostGIS, carga el respaldo en una transacción y lo degrada a `NOSUPERUSER` al terminar. Te pedirá dos veces una contraseña nueva para `futlink_app`; guárdala para el paso siguiente. Si una restauración falla, el script elimina la base y el rol que él mismo creó.
 
 Al terminar, comprueba que aparezcan la versión PostGIS, los conteos de usuarios/partidos y las migraciones aplicadas. La extensión PostGIS está dentro del respaldo; el paquete instalado en Arch aporta sus archivos binarios.
 

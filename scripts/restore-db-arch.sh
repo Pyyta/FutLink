@@ -66,6 +66,9 @@ cleanup() {
   if [[ "$DB_CREATED" == '1' && "$RESTORE_SUCCEEDED" != '1' ]]; then
     sudo -u postgres dropdb --if-exists -- "$DB_NAME" || true
   fi
+  if [[ "$ROLE_CREATED" == '1' && "$RESTORE_SUCCEEDED" != '1' ]]; then
+    sudo -u postgres dropuser --if-exists -- "$APP_ROLE" || true
+  fi
   sudo rm -f -- "$STAGED_DUMP" || true
   exit "$status"
 }
@@ -94,7 +97,8 @@ sudo -u postgres psql -X -d postgres -v ON_ERROR_STOP=1 \
   -c "ALTER ROLE \"$APP_ROLE\" NOSUPERUSER"
 
 echo 'Verificando PostGIS, migraciones y datos principales:'
-sudo -u postgres psql -X -d "$DB_NAME" --role="$APP_ROLE" -v ON_ERROR_STOP=1 \
+sudo -u postgres psql -X -d "$DB_NAME" -v ON_ERROR_STOP=1 \
+  -c "SET ROLE \"$APP_ROLE\"" \
   -c "SELECT current_database() AS base, postgis_version() AS postgis" \
   -c 'SELECT (SELECT count(*) FROM users) AS usuarios, (SELECT count(*) FROM matchs) AS partidos, (SELECT count(*) FROM schema_migrations) AS migraciones_aplicadas'
 
