@@ -18,6 +18,8 @@ import type {
   AdminUserResponse,
   AuthResult,
   Catalog,
+  CreateMatchInput,
+  CreateMatchResponse,
   CreateAdminUserInput,
   CreateRequestInput,
   DeleteAdminUserResponse,
@@ -150,6 +152,13 @@ export const usersApi = {
 };
 
 export const matchesApi = {
+  create(input: CreateMatchInput): Promise<CreateMatchResponse> {
+    return apiRequest<CreateMatchResponse>('/matches', {
+      method: 'POST',
+      body: input,
+    });
+  },
+
   search(input: MatchSearchInput = {}): Promise<MatchSearchResponse> {
     return apiRequest<MatchSearchResponse>(
       `/matches${buildQuery({

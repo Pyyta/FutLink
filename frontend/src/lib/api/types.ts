@@ -179,6 +179,20 @@ export interface MatchDetailResponse {
   match: MatchDetail;
 }
 
+export interface CreateMatchInput {
+  matchDate: string;
+  locality: string;
+  modality: string | null;
+  description: string | null;
+  positions: { positionId: number; slots: number }[];
+  latitude?: number | null;
+  longitude?: number | null;
+}
+
+export interface CreateMatchResponse {
+  match: MatchDetail;
+}
+
 export interface PlayerListItem {
   id: number;
   name: string | null;

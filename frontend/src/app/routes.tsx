@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { AdminPage } from '../pages/AdminPage';
 import { CompleteProfilePage } from '../pages/CompleteProfilePage';
+import { CreateMatchPage } from '../pages/CreateMatchPage';
 import { EditProfilePage } from '../pages/EditProfilePage';
 import { ForbiddenPage } from '../pages/ForbiddenPage';
 import { HomePage } from '../pages/HomePage';
@@ -55,6 +56,7 @@ export function AppRoutes() {
             <Route path="notificaciones" element={<NotificationsPage />} />
             <Route path="perfil" element={<ProfilePage />} />
             <Route path="perfil/editar" element={<EditProfilePage />} />
+            <Route path="partidos/crear" element={<CreateMatchPage />} />
             <Route path="jugadores/:id" element={<PublicProfilePage />} />
             <Route path="partidos/:id" element={<MatchDetailPage />} />
             <Route path="sin-acceso" element={<ForbiddenPage />} />

@@ -84,8 +84,48 @@ export const profileSchema = z.object({
     ),
 });
 
+const matchPositionSchema = z.object({
+  positionId: z.number().int().positive(),
+  slots: z
+    .number()
+    .int('validation.matchSlotsInteger')
+    .min(1, 'validation.matchSlotsMin')
+    .max(30, 'validation.matchSlotsMax'),
+});
+
+export const createMatchSchema = z
+  .object({
+    matchDate: z.string().min(1, 'validation.matchDateRequired'),
+    locality: z
+      .string()
+      .trim()
+      .min(2, 'validation.localityRequired')
+      .max(120, 'validation.localityMax'),
+    modality: z.string().trim().max(20, 'validation.matchModalityMax'),
+    description: z.string().trim().max(500, 'validation.matchDescriptionMax'),
+    positions: z
+      .array(matchPositionSchema)
+      .min(1, 'validation.matchPositionsRequired')
+      .refine(
+        (items) => new Set(items.map((item) => item.positionId)).size === items.length,
+        'validation.matchPositionsUnique',
+      )
+      .refine(
+        (items) => items.reduce((total, item) => total + item.slots, 0) <= 30,
+        'validation.matchSlotsTotal',
+      ),
+  })
+  .refine(
+    (values) => {
+      const date = new Date(`${values.matchDate}:00-05:00`);
+      return !Number.isNaN(date.getTime()) && date.getTime() > Date.now();
+    },
+    { path: ['matchDate'], message: 'validation.matchDateFuture' },
+  );
+
 export type LoginFormValues = z.infer<typeof loginSchema>;
 export type RegisterFormValues = z.infer<typeof registerSchema>;
 export type RecoverEmailFormValues = z.infer<typeof recoverEmailSchema>;
 export type ResetPasswordFormValues = z.infer<typeof resetPasswordSchema>;
 export type ProfileFormValues = z.infer<typeof profileSchema>;
+export type CreateMatchFormValues = z.infer<typeof createMatchSchema>;

@@ -41,13 +41,22 @@ export function ProfilePage() {
         <Button
           fullWidth
           onClick={() => {
+            navigate('/partidos/crear');
+          }}
+        >
+          {t('profile.createMatchAction')}
+        </Button>
+        <Button
+          variant="outline"
+          fullWidth
+          onClick={() => {
             navigate('/perfil/editar');
           }}
         >
           {t('profile.editAction')}
         </Button>
         <Button
-          variant="outline"
+          variant="ghost"
           fullWidth
           onClick={() => {
             navigate(`/jugadores/${user.id}`);
