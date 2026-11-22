@@ -764,7 +764,7 @@ const esCO = {
     scanning: 'Abriendo cámara…',
     scanInstructions: 'Apunta al código QR mostrado por el servidor FutLink',
     scanSuccess: 'Dirección leída. Prueba la conexión para continuar.',
-    scanFailed: 'No se pudo leer el código QR. Revisa el permiso de cámara.',
+    scanFailed: 'No se pudo iniciar o completar el escaneo QR.',
     invalidQr: 'El QR no contiene una dirección de servidor FutLink válida.',
     qrTitle: 'Conectar la app móvil',
     qrDescription:

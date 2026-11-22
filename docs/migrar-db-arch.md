@@ -132,6 +132,8 @@ sudo -u postgres psql -d postgres -c 'ALTER ROLE futlink_app NOSUPERUSER;'
 - `pg_restore: unsupported version`: usa `pg_restore` de PostgreSQL 18 o posterior en Arch; el origen detectado es 18.6.
 - Falta `postgis.control` o no se encuentra la extensión: comprueba `pacman -Q postgis` e instala el paquete antes de repetir la restauración.
 - El script dice que la base ya existe: detente y revisa qué datos hay en ella. El script se niega a sobrescribirla; no la borres sin respaldarla y confirmar que es el destino correcto.
-- Falló la restauración: el script quita la base creada durante ese intento; revisa el mensaje. El respaldo de origen no se modifica y puede usarse para repetir el proceso.
+- Falló la restauración: el script quita la base y el rol creados durante ese intento; revisa el mensaje. El respaldo de origen no se modifica y puede usarse para repetir el proceso.
 - API no conecta: revisa `DB_HOST=localhost`, usuario/contraseña, `sudo systemctl status postgresql` y `journalctl -u postgresql`.
 - El teléfono no llega: revisa `HOST=0.0.0.0`, la regla del firewall para TCP 3000 y que el Wi-Fi no aísle los clientes.
+- `/api/health` funciona en el navegador del teléfono pero la app dice que no conecta: comprueba que CORS permite el origen nativo con `curl -i -H 'Origin: https://localhost' http://localhost:3000/api/health`; la respuesta debe incluir `Access-Control-Allow-Origin: https://localhost`. Si no aparece, actualiza y reinicia la API.
+- El navegador muestra JSON sin QR: abre `/servidor`; `/api/health` es solo la comprobación de salud.

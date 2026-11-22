@@ -39,6 +39,17 @@ function isBlockedMixedContent(url: string): boolean {
   );
 }
 
+function getErrorDetail(error: unknown): string | null {
+  if (typeof error === 'string') return error.slice(0, 160);
+  if (!error || typeof error !== 'object') return null;
+
+  const detail = error as { code?: unknown; message?: unknown };
+  return [detail.code, detail.message]
+    .filter((value): value is string => typeof value === 'string' && value.length > 0)
+    .join(': ')
+    .slice(0, 160) || null;
+}
+
 export function ServerSettingsPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -62,6 +73,7 @@ export function ServerSettingsPage() {
     try {
       const {
         CapacitorBarcodeScanner,
+        CapacitorBarcodeScannerAndroidScanningLibrary,
         CapacitorBarcodeScannerTypeHint,
       } = await import('@capacitor/barcode-scanner');
       const { ScanResult } = await CapacitorBarcodeScanner.scanBarcode({
@@ -69,6 +81,9 @@ export function ServerSettingsPage() {
         scanInstructions: t('server.scanInstructions'),
         scanButton: false,
         cameraDirection: 1,
+        android: {
+          scanningLibrary: CapacitorBarcodeScannerAndroidScanningLibrary.ZXING,
+        },
       });
       const normalized = normalizeApiUrl(ScanResult);
 
@@ -79,8 +94,15 @@ export function ServerSettingsPage() {
 
       setValue(normalized);
       setResult({ tone: 'success', message: t('server.scanSuccess') });
-    } catch {
-      setResult({ tone: 'error', message: t('server.scanFailed') });
+    } catch (error) {
+      console.error('[FutLink] No se pudo completar el escaneo QR', error);
+      const detail = getErrorDetail(error);
+      setResult({
+        tone: 'error',
+        message: detail
+          ? `${t('server.scanFailed')} (${detail})`
+          : t('server.scanFailed'),
+      });
     } finally {
       setScanning(false);
     }
@@ -133,8 +155,15 @@ export function ServerSettingsPage() {
         message:
           payload?.db === 'up' ? t('server.testOk') : t('server.testDbDown'),
       });
-    } catch {
-      setResult({ tone: 'error', message: t('server.testNetworkError') });
+    } catch (error) {
+      console.error('[FutLink] Falló la prueba de conexión', error);
+      const detail = getErrorDetail(error);
+      setResult({
+        tone: 'error',
+        message: detail
+          ? `${t('server.testNetworkError')} (${detail})`
+          : t('server.testNetworkError'),
+      });
     } finally {
       window.clearTimeout(timeoutId);
       setTesting(false);
